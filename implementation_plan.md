@@ -154,9 +154,10 @@ NexCommand/
 
 4. **Access control stub** — Add role field to requests. Don't build full auth yet, but structure the middleware so it's pluggable.
 
-**Deliverable:** Working SOS form → backend → database pipeline. Verify by checking DB after submission.
+**Deliverable:** Working SOS form → backend → database pipeline. Verify by checking DB after submission.  
+**Status:** ✅ **COMPLETED** — Standalone SOS portal (`sos.html` + `src/sos.js`) built with Leaflet pin drop & GPS auto-detect, connected to backend `POST /api/incidents`, real-time Socket.IO incident room updates, voluntary privacy toggle, location stream (`POST /api/incidents/:id/location`), and cancellation (`POST /api/incidents/:id/cancel`). Verified with live DB persistence & WebSocket broadcast.
 
-**Graphify:** `graphify update .` after new files are created.
+**Graphify:** Updated (`graphify update .`) with 177 nodes, 271 edges, 14 communities.
 
 ---
 

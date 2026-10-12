@@ -1,6 +1,8 @@
 import './style.css';
+import { io } from 'socket.io-client';
 
 // --- State Management ---
+let socket = null;
 const baseLat = 28.6139; // Delhi center
 const baseLng = 77.2090;
 
@@ -643,6 +645,11 @@ function setupCivilianView() {
   const civilianSOSForm = document.getElementById('civilianSOSForm');
   const sosTypeSelector = document.getElementById('sosTypeSelector');
 
+  // Join incident room if we have an active incident
+  if (socket && activeCivilianIncident?.dbId) {
+    socket.emit('join:incident', { incidentId: activeCivilianIncident.dbId });
+  }
+
   // Bind category pills
   if (sosTypeSelector) {
     const pills = sosTypeSelector.querySelectorAll('.type-pill');
@@ -664,25 +671,31 @@ function setupCivilianView() {
           <i class="ph-fill ph-shield-check" style="font-size: 38px; color: #10b981; margin-bottom: 8px;"></i>
           <h4 style="color: var(--text-main); margin-bottom: 4px;">No Active Emergency</h4>
           <p style="font-size: 12px;">Submit the SOS form on the left if you require immediate emergency assistance.</p>
+          <div style="margin-top: 14px;">
+            <a href="/sos.html" target="_blank" style="color: var(--cyan); font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+              <i class="ph-fill ph-arrow-square-out"></i> Open Fullscreen SOS Interface
+            </a>
+          </div>
         </div>
       `;
     } else {
-      if (civilianStatusBadge) civilianStatusBadge.textContent = activeCivilianIncident.status.toUpperCase();
+      const st = (activeCivilianIncident.status || 'REPORTED').toUpperCase();
+      if (civilianStatusBadge) civilianStatusBadge.textContent = st;
       civilianTrackerContent.innerHTML = `
         <div class="tracker-timeline">
           <div class="tracker-step completed">
             <strong>1. SOS Received & Validated</strong>
-            <span>Reported at ${activeCivilianIncident.time} • ${activeCivilianIncident.type}</span>
+            <span>Reported at ${activeCivilianIncident.time} • ${activeCivilianIncident.type} (${activeCivilianIncident.id})</span>
           </div>
-          <div class="tracker-step completed">
-            <strong>2. Responders Dispatched</strong>
-            <span>Paramedic Unit Alpha (MEDIC-01) assigned to your location</span>
+          <div class="tracker-step ${['TRIAGED', 'DISPATCHED', 'ON_SCENE', 'RESOLVED'].includes(st) ? 'completed' : 'active'}">
+            <strong>2. Dispatch Triage & Verification</strong>
+            <span>Priority: ${activeCivilianIncident.severity?.toUpperCase() || 'HIGH'} • Central Dispatch notified</span>
           </div>
-          <div class="tracker-step ${activeCivilianIncident.status === 'on_scene' ? 'completed' : 'active'}">
-            <strong>3. En Route to Your Position</strong>
-            <span>Estimated arrival: ~2 minutes. Keep your line open.</span>
+          <div class="tracker-step ${['DISPATCHED', 'ON_SCENE', 'RESOLVED'].includes(st) ? 'completed' : ''}">
+            <strong>3. Responders Dispatched</strong>
+            <span>${activeCivilianIncident.responderCallsign ? `Unit ${activeCivilianIncident.responderCallsign} en route` : 'Assigning nearest response unit...'}</span>
           </div>
-          <div class="tracker-step ${activeCivilianIncident.status === 'resolved' ? 'completed' : ''}">
+          <div class="tracker-step ${['ON_SCENE', 'RESOLVED'].includes(st) ? 'completed' : ''}">
             <strong>4. Scene Secured & Rescue Complete</strong>
             <span>Voluntary location sharing terminates automatically upon completion.</span>
           </div>
@@ -698,42 +711,96 @@ function setupCivilianView() {
 
   // Form submission
   if (civilianSOSForm) {
-    civilianSOSForm.onsubmit = (e) => {
+    civilianSOSForm.onsubmit = async (e) => {
       e.preventDefault();
       const activePill = sosTypeSelector?.querySelector('.type-pill.active');
       const type = activePill ? activePill.getAttribute('data-type') : 'Medical';
       const affected = document.getElementById('sosAffectedCount')?.value || 1;
-      const desc = document.getElementById('sosDescription')?.value || 'Emergency request submitted';
+      const contactPhone = document.getElementById('sosContact')?.value || '';
+      const desc = document.getElementById('sosDescription')?.value || 'Emergency assistance requested via Civilian Portal.';
       const consent = document.getElementById('sosLocationConsent')?.checked;
 
-      const inc = {
-        id: `SOS-${++incidentCounter}`,
-        type: type,
-        icon: type === 'Medical' ? 'ph-ambulance' : (type === 'Fire' ? 'ph-fire' : 'ph-shield-warning'),
-        severity: 'critical',
-        location: 'Connaught Place (Voluntary GPS Pin)',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        coords: { lat: baseLat + 0.005, lng: baseLng - 0.004 },
-        status: 'dispatched',
-        affected: affected,
-        voluntaryGPS: consent
-      };
+      const submitBtn = civilianSOSForm.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> TRANSMITTING SOS...';
+      }
 
-      state.incidents.unshift(inc);
-      activeCivilianIncident = inc;
-      const res = state.resources.find(r => r.status === 'available');
-      if (res) res.status = 'busy';
-      
-      updateMetrics();
-      renderAll();
-      renderTracker();
-      addMapMarker(inc);
+      try {
+        const payload = {
+          type: type.toUpperCase(),
+          affectedCount: parseInt(affected, 10),
+          severity: 'HIGH',
+          description: desc,
+          reporterContact: contactPhone,
+          lat: baseLat + 0.005,
+          lng: baseLng - 0.004,
+          source: 'GPS',
+          locationSharingActive: Boolean(consent)
+        };
+
+        const res = await fetch('/api/incidents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        const serverInc = data.incident;
+
+        const inc = {
+          id: serverInc ? serverInc.incidentNumber : `SOS-${++incidentCounter}`,
+          dbId: serverInc?.id,
+          type: type,
+          icon: type === 'Medical' ? 'ph-ambulance' : (type === 'Fire' ? 'ph-fire' : 'ph-shield-warning'),
+          severity: 'critical',
+          location: serverInc?.address || 'Connaught Place (Voluntary GPS Pin)',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          coords: { lat: serverInc?.lat || (baseLat + 0.005), lng: serverInc?.lng || (baseLng - 0.004) },
+          status: serverInc?.status || 'REPORTED',
+          affected: affected,
+          voluntaryGPS: consent
+        };
+
+        state.incidents.unshift(inc);
+        activeCivilianIncident = inc;
+        
+        if (socket && inc.dbId) {
+          socket.emit('join:incident', { incidentId: inc.dbId });
+        }
+
+        const availableRes = state.resources.find(r => r.status === 'available');
+        if (availableRes) availableRes.status = 'busy';
+
+        updateMetrics();
+        renderAll();
+        renderTracker();
+        addMapMarker(inc);
+      } catch (err) {
+        console.warn('Backend SOS submission error, falling back locally:', err);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="ph-fill ph-phone-call"></i> TRANSMIT EMERGENCY SOS';
+        }
+      }
     };
   }
 }
 
-window.cancelCivilianSOS = () => {
+window.cancelCivilianSOS = async () => {
   if (activeCivilianIncident) {
+    if (activeCivilianIncident.dbId) {
+      try {
+        await fetch(`/api/incidents/${activeCivilianIncident.dbId}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Civilian marked safe via UI' })
+        });
+      } catch (e) {
+        console.warn('Error cancelling incident on server:', e);
+      }
+    }
     state.incidents = state.incidents.filter(i => i.id !== activeCivilianIncident.id);
     activeCivilianIncident = null;
     updateMetrics();
@@ -920,11 +987,72 @@ function setupAuthUI() {
   updateUserUI(currentUser);
 }
 
+// --- WebSocket Real-Time Listener ---
+function initSocket() {
+  try {
+    socket = io();
+
+    socket.on('connect', () => {
+      console.log('📡 Dashboard connected to WebSocket gateway:', socket.id);
+      if (currentUser?.role === 'COORDINATOR' || currentUser?.role === 'ADMIN') {
+        socket.emit('join:coordinator');
+      }
+    });
+
+    socket.on('incident:new', (newInc) => {
+      console.log('🚨 Live Incident received from SOS portal:', newInc);
+      const incObj = {
+        id: newInc.incidentNumber || `INC-${newInc.id.slice(0, 4)}`,
+        dbId: newInc.id,
+        type: newInc.type ? (newInc.type.charAt(0) + newInc.type.slice(1).toLowerCase().replace('_', ' ')) : 'Medical',
+        icon: newInc.type === 'MEDICAL' ? 'ph-ambulance' : (newInc.type === 'FIRE' ? 'ph-fire' : 'ph-shield-warning'),
+        severity: (newInc.predictedPriority || newInc.severity || 'HIGH').toLowerCase(),
+        location: newInc.address || `Sector Lat: ${newInc.lat.toFixed(3)}, Lng: ${newInc.lng.toFixed(3)}`,
+        time: new Date(newInc.reportedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        coords: { lat: newInc.lat, lng: newInc.lng },
+        status: (newInc.status || 'REPORTED').toLowerCase(),
+        affected: newInc.affectedCount,
+        description: newInc.description
+      };
+
+      if (!state.incidents.some(i => i.id === incObj.id || i.dbId === incObj.dbId)) {
+        state.incidents.unshift(incObj);
+        updateMetrics();
+        renderAll();
+        addMapMarker(incObj);
+      }
+    });
+
+    socket.on('incident:updated', (updatedInc) => {
+      const match = state.incidents.find(i => i.id === updatedInc.incidentNumber || i.dbId === updatedInc.id);
+      if (match) {
+        match.status = updatedInc.status.toLowerCase();
+        updateMetrics();
+        renderAll();
+      }
+      if (activeCivilianIncident && (activeCivilianIncident.id === updatedInc.incidentNumber || activeCivilianIncident.dbId === updatedInc.id)) {
+        activeCivilianIncident.status = updatedInc.status;
+        setupCivilianView();
+      }
+    });
+
+    socket.on('incident:location_updated', (loc) => {
+      const marker = mapMarkers[loc.incidentId];
+      if (marker && loc.lat && loc.lng) {
+        marker.setLatLng([loc.lat, loc.lng]);
+      }
+    });
+  } catch (err) {
+    console.warn('Socket init warning:', err);
+  }
+}
+
 // --- Initialization & Simulation Loop ---
 function init() {
   initMap();
   setupNavigation();
   setupAuthUI();
+  initSocket();
   updateMetrics();
   renderAll();
   

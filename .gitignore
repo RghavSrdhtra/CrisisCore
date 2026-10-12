@@ -42,6 +42,9 @@ graphify-out/
 # --- Project spec PDF (large binary, not needed in repo) ---
 project_1788935466.pdf
 
+# --- Internal project overview (development reference, not repo content) ---
+PROJECT_OVERVIEW.md
+
 # --- OS junk ---
 .DS_Store
 Thumbs.db

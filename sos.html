@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emergency SOS Portal — CrisisCore</title>
+  
+  <!-- SEO & Meta -->
+  <meta name="description" content="CrisisCore Emergency SOS Portal - Immediate civilian distress reporting and real-time response tracking." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body class="sos-portal-body">
+  <div class="sos-page-wrapper">
+    <!-- SOS Header -->
+    <header class="sos-topbar">
+      <div class="sos-brand">
+        <i class="ph-fill ph-shield-warning neon-icon"></i>
+        <div class="sos-brand-text">
+          <h1>CrisisCore <span>SOS</span></h1>
+          <span class="sos-badge">Civilian Emergency Portal</span>
+        </div>
+      </div>
+      
+      <div class="sos-topbar-actions">
+        <div class="system-conn-pill" id="systemConnPill">
+          <div class="pulse-dot green" id="connDot"></div>
+          <span id="connText">Dispatch Online</span>
+        </div>
+        <a href="/" class="btn-back-dashboard">
+          <i class="ph ph-squares-four"></i> Command Dashboard
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="sos-container">
+      
+      <!-- Left Column: SOS Form -->
+      <section class="sos-form-section" id="sosFormContainer">
+        <div class="glass-panel sos-card">
+          <div class="sos-card-header">
+            <div class="sos-icon-box pulse-red">
+              <i class="ph-fill ph-phone-call"></i>
+            </div>
+            <div>
+              <h2>Transmit Distress Signal</h2>
+              <p>Direct priority line to Central Coordination & nearest rescue units.</p>
+            </div>
+          </div>
+
+          <form id="standaloneSOSForm" class="standalone-sos-form">
+            <!-- Emergency Type -->
+            <div class="form-section-block">
+              <label class="section-label"><i class="ph-fill ph-tag"></i> Emergency Category</label>
+              <div class="emergency-type-grid" id="categoryGrid">
+                <button type="button" class="type-card-btn active" data-type="MEDICAL">
+                  <i class="ph-fill ph-first-aid text-blue"></i>
+                  <span>Medical</span>
+                  <small>Trauma, Cardiac, EMS</small>
+                </button>
+                <button type="button" class="type-card-btn" data-type="FIRE">
+                  <i class="ph-fill ph-fire text-red"></i>
+                  <span>Fire / Rescue</span>
+                  <small>Blaze, Smoke, Hazmat</small>
+                </button>
+                <button type="button" class="type-card-btn" data-type="SECURITY">
+                  <i class="ph-fill ph-shield-warning text-amber"></i>
+                  <span>Security</span>
+                  <small>Police, Intrusion, Violence</small>
+                </button>
+                <button type="button" class="type-card-btn" data-type="NATURAL_DISASTER">
+                  <i class="ph-fill ph-waves text-cyan"></i>
+                  <span>Disaster</span>
+                  <small>Flood, Earthquake, Collapse</small>
+                </button>
+                <button type="button" class="type-card-btn" data-type="INDUSTRIAL">
+                  <i class="ph-fill ph-factory text-purple"></i>
+                  <span>Industrial</span>
+                  <small>Chemical, Gas, Facility</small>
+                </button>
+              </div>
+            </div>
+
+            <!-- Severity & Affected Count -->
+            <div class="form-row-2col">
+              <div class="form-section-block">
+                <label class="section-label" for="inputAffected"><i class="ph-fill ph-users"></i> Casualties / People Affected</label>
+                <div class="number-stepper">
+                  <button type="button" class="step-btn" id="decAffectedBtn"><i class="ph ph-minus"></i></button>
+                  <input type="number" id="inputAffected" class="stepper-input" min="1" max="500" value="1" required />
+                  <button type="button" class="step-btn" id="incAffectedBtn"><i class="ph ph-plus"></i></button>
+                </div>
+              </div>
+              
+              <div class="form-section-block">
+                <label class="section-label" for="inputSeverity"><i class="ph-fill ph-gauge"></i> Reported Severity</label>
+                <select id="inputSeverity" class="select-styled">
+                  <option value="CRITICAL">Critical — Immediate Life Threat</option>
+                  <option value="HIGH" selected>High — Urgent Response Needed</option>
+                  <option value="MEDIUM">Medium — Serious Condition</option>
+                  <option value="LOW">Low — Non-life threatening</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Emergency Description -->
+            <div class="form-section-block">
+              <label class="section-label" for="inputDescription"><i class="ph-fill ph-chat-text"></i> Situation Details</label>
+              <textarea id="inputDescription" class="textarea-styled" rows="3" placeholder="Describe the emergency: trapped individuals, visible smoke, injuries, exact landmarks..." required></textarea>
+              
+              <div class="quick-tags" id="quickTags">
+                <span class="quick-tag" data-text="Multiple injured victims requiring stretcher transport.">+ Multiple Injured</span>
+                <span class="quick-tag" data-text="Active fire with heavy smoke spreading rapidly.">+ Heavy Smoke</span>
+                <span class="quick-tag" data-text="Trapped behind debris, exit path blocked.">+ Trapped Victims</span>
+                <span class="quick-tag" data-text="Gas odor detected in building.">+ Gas Leak</span>
+              </div>
+            </div>
+
+            <!-- Contact & Phone -->
+            <div class="form-section-block">
+              <label class="section-label" for="inputPhone"><i class="ph-fill ph-phone"></i> Callback Phone Number (Optional)</label>
+              <input type="tel" id="inputPhone" class="input-styled" placeholder="+91 98765 43210" value="" />
+              <span class="field-hint">Used exclusively by dispatchers to confirm scene status.</span>
+            </div>
+
+            <!-- Location Section (GPS + Leaflet Pin Drop) -->
+            <div class="form-section-block location-box">
+              <div class="location-box-header">
+                <label class="section-label"><i class="ph-fill ph-navigation-arrow"></i> Emergency Location</label>
+                <button type="button" class="btn-gps-detect" id="btnAutoGPS">
+                  <i class="ph-fill ph-crosshair"></i> Auto-Detect My GPS
+                </button>
+              </div>
+
+              <!-- Leaflet Map Container -->
+              <div class="sos-map-container" id="sosLocationMap"></div>
+
+              <div class="location-readout">
+                <div class="coord-item">
+                  <span class="coord-label">Latitude:</span>
+                  <span class="coord-value" id="displayLat">28.613900</span>
+                </div>
+                <div class="coord-item">
+                  <span class="coord-label">Longitude:</span>
+                  <span class="coord-value" id="displayLng">77.209000</span>
+                </div>
+                <div class="coord-item">
+                  <span class="coord-label">Source:</span>
+                  <span class="badge" id="displaySource">MANUAL PIN</span>
+                </div>
+              </div>
+              <p class="map-hint"><i class="ph ph-info"></i> Click anywhere on the map or drag the marker to adjust exact emergency pin.</p>
+            </div>
+
+            <!-- Voluntary Privacy Toggle (Section 4.11) -->
+            <div class="privacy-consent-box">
+              <div class="privacy-consent-info">
+                <strong><i class="ph-fill ph-lock-key"></i> Voluntary Location Sharing (Section 4.11)</strong>
+                <p>Transmit real-time telemetry so arriving responders find you directly. Automatically terminates once the incident is resolved.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="sosConsentCheck" checked />
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="submit-action-row">
+              <button type="submit" class="btn-transmit-sos" id="submitSosBtn">
+                <i class="ph-fill ph-warning-octagon"></i>
+                <span>TRANSMIT EMERGENCY SOS</span>
+              </button>
+            </div>
+            
+            <div id="sosAlertBox" class="auth-alert" style="display: none; margin-top: 12px;"></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right Column: Live Status Tracker & Guidelines -->
+      <section class="sos-tracker-section">
+        
+        <!-- Live Status Tracker Card -->
+        <div class="glass-panel tracker-card">
+          <div class="panel-header">
+            <h2><i class="ph-fill ph-activity"></i> Response Tracker</h2>
+            <span class="badge" id="trackerStatusBadge">STANDBY</span>
+          </div>
+
+          <div id="trackerEmptyState" class="tracker-empty">
+            <div class="tracker-pulse-icon">
+              <i class="ph-fill ph-radio-button"></i>
+            </div>
+            <h3>Standing by for Distress Signal</h3>
+            <p>Fill out the emergency details on the left and submit to trigger instant dispatch and real-time live tracking.</p>
+          </div>
+
+          <div id="trackerActiveState" class="tracker-active" style="display: none;">
+            <div class="incident-badge-row">
+              <span class="incident-num" id="activeIncNumber">INC-2026-0000</span>
+              <span class="priority-pill" id="activeIncPriority">HIGH PRIORITY</span>
+            </div>
+
+            <!-- Progress Timeline -->
+            <div class="timeline-stepper">
+              <div class="timeline-step" id="stepReported">
+                <div class="step-indicator"><i class="ph-fill ph-check"></i></div>
+                <div class="step-info">
+                  <strong>1. Distress Signal Received</strong>
+                  <span id="stepReportedTime">Pending submission...</span>
+                </div>
+              </div>
+
+              <div class="timeline-step" id="stepTriaged">
+                <div class="step-indicator"><i class="ph-fill ph-check"></i></div>
+                <div class="step-info">
+                  <strong>2. AI Triage & Coordinator Verified</strong>
+                  <span>Prioritized for rapid dispatch</span>
+                </div>
+              </div>
+
+              <div class="timeline-step" id="stepDispatched">
+                <div class="step-indicator"><i class="ph-fill ph-ambulance"></i></div>
+                <div class="step-info">
+                  <strong>3. Responders Dispatched</strong>
+                  <span id="assignedUnitName">Assigning nearest response unit...</span>
+                </div>
+              </div>
+
+              <div class="timeline-step" id="stepOnScene">
+                <div class="step-indicator"><i class="ph-fill ph-map-pin"></i></div>
+                <div class="step-info">
+                  <strong>4. Unit On Scene</strong>
+                  <span>Emergency personnel arriving at your location</span>
+                </div>
+              </div>
+
+              <div class="timeline-step" id="stepResolved">
+                <div class="step-indicator"><i class="ph-fill ph-flag-checkered"></i></div>
+                <div class="step-info">
+                  <strong>5. Operation Completed</strong>
+                  <span>Scene secured. Location sharing severed per Sec 4.11.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Location Stream Toggle -->
+            <div class="active-tracker-actions">
+              <div class="live-stream-status">
+                <div class="pulse-dot green" id="streamDot"></div>
+                <span id="streamStatusText">Live GPS Streaming: Active</span>
+              </div>
+              <button type="button" class="btn-toggle-stream" id="toggleStreamBtn">
+                <i class="ph ph-eye-slash"></i> Pause Location
+              </button>
+            </div>
+
+            <!-- Cancel SOS Button -->
+            <button type="button" class="btn-cancel-incident" id="btnCancelSOS">
+              <i class="ph-fill ph-check-circle"></i> I Am Safe — Cancel SOS
+            </button>
+          </div>
+        </div>
+
+        <!-- Emergency Protocols Card -->
+        <div class="glass-panel protocol-card">
+          <div class="panel-header">
+            <h2><i class="ph-fill ph-shield-check"></i> Citizen Safety Protocol</h2>
+          </div>
+          <div class="protocol-body">
+            <div class="protocol-item">
+              <i class="ph-fill ph-crosshair text-red"></i>
+              <div>
+                <strong>Keep Position Visible</strong>
+                <p>If safe to do so, move away from fire, smoke, and unstable structures.</p>
+              </div>
+            </div>
+            <div class="protocol-item">
+              <i class="ph-fill ph-phone-call text-amber"></i>
+              <div>
+                <strong>Keep Phone Line Open</strong>
+                <p>Central Coordination may call you directly to verify hazards or give instructions.</p>
+              </div>
+            </div>
+            <div class="protocol-item">
+              <i class="ph-fill ph-lock text-cyan"></i>
+              <div>
+                <strong>Privacy Protected</strong>
+                <p>Per Section 4.11, your location is shared exclusively with arriving responders and purged upon resolution.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="/src/sos.js"></script>
+</body>
+</html>
