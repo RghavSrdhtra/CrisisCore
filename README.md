@@ -30,7 +30,6 @@ It is built as a college minor project but is structured like a production syste
 
 - **Live Incident Feed** - incidents stream in over WebSocket in real time
 - **Tactical Map** - Leaflet.js map with CartoDB Dark Matter tiles; markers update as incidents arrive
-- **AI Situation Briefs** - one-click Gemini Flash analysis per incident with tactical recommendations
 - **Smart Resource Dispatch** - auto-matches incidents to nearest available unit (ambulance, fire engine, drone)
 - **Role-Based Access** - three roles: Admin, Coordinator, Responder, each with scoped permissions
 - **Audit Log** - every assignment and status change is recorded
