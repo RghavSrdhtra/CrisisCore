@@ -1,22 +1,56 @@
-# Logs
-logs
+# --- Dependencies ---
+node_modules/
+server/node_modules/
+
+# --- Build output ---
+dist/
+dist-ssr/
+
+# --- Environment & secrets ---
+.env
+.env.local
+server/.env
+
+# --- Database files ---
+*.db
+*.db-journal
+server/dev.db
+server/prisma/dev.db
+
+# --- Logs ---
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# --- Python ---
+ml/__pycache__/
+ml/.venv/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
 
-# Editor directories and files
+# --- Graphify (generated knowledge graph, local only) ---
+graphify-out/
+
+# --- AI agent config (local tooling, not project code) ---
+.agents/
+
+# --- Project spec PDF (large binary, not needed in repo) ---
+project_1788935466.pdf
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editor ---
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj

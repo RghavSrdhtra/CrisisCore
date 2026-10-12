@@ -1,0 +1,149 @@
+// Prisma Schema for NexCommand
+// RBAC-enabled Crisis Response Platform Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Model with Multi-Tier Role Privilege
+// Roles: CIVILIAN, RESPONDER, COORDINATOR, ADMIN
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("CIVILIAN") // CIVILIAN | RESPONDER | COORDINATOR | ADMIN
+  phone        String?
+  agency       String?  // e.g. "Metro Fire Service", "Emergency Medical Corp", "Police Dept"
+  badgeNumber  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  incidents            Incident[]
+  responderProfile     Responder?
+  auditLogs            AuditLog[]
+  assignmentsCoordinated Assignment[] @relation("CoordinatorAssignments")
+}
+
+// Incident Model with ML Prioritization & Voluntary Location Lifecycle
+model Incident {
+  id                    String    @id @default(uuid())
+  incidentNumber        String    @unique // e.g. "INC-2026-001"
+  type                  String    // MEDICAL | FIRE | SECURITY | NATURAL_DISASTER | INDUSTRIAL | OTHER
+  description           String
+  affectedCount         Int       @default(1)
+  status                String    @default("REPORTED") // REPORTED | TRIAGED | DISPATCHED | ON_SCENE | RESOLVED | CANCELLED
+  severity              String    @default("MEDIUM")   // LOW | MEDIUM | HIGH | CRITICAL (initial/reported)
+  
+  // Predictive ML attributes (Section 4.2)
+  predictedPriority     String?   // LOW | MEDIUM | HIGH | CRITICAL
+  priorityConfidence    Float?    // 0.0 to 1.0 confidence score
+  manualPriority        String?   // Coordinator override priority
+  
+  // Geospatial & Privacy attributes (Section 4.1, 4.6, 4.11)
+  lat                   Float
+  lng                   Float
+  address               String?
+  locationSharingActive Boolean   @default(true) // Voluntary location toggle; terminates upon RESOLVED
+  reporterContact       String?
+  
+  reporterId            String?
+  reporter              User?     @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+  
+  reportedAt            DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  resolvedAt            DateTime?
+
+  // Relationships
+  assignments           Assignment[]
+  locationLogs          LocationLog[]
+}
+
+// Responder Model representing emergency units & field personnel
+model Responder {
+  id                String    @id @default(uuid())
+  callsign          String    @unique // e.g. "MEDIC-04", "FIRE-ENGINE-02"
+  name              String
+  type              String    // FIRE_RESCUE | MEDICAL_AMBULANCE | POLICE_SECURITY | DISASTER_PERSONNEL | SPECIALIZED_EQUIPMENT
+  capability        String    // CSV or description of capabilities
+  status            String    @default("AVAILABLE") // AVAILABLE | ASSIGNED | EN_ROUTE | ON_SCENE | UNAVAILABLE
+  lat               Float
+  lng               Float
+  currentIncidentId String?
+  lastStatusUpdate  DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  userId            String?   @unique
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Relationships
+  resources         Resource[]
+  assignments       Assignment[]
+  locationLogs      LocationLog[]
+}
+
+// Physical or specialized emergency resources assigned to responders
+model Resource {
+  id                  String     @id @default(uuid())
+  name                String     // e.g. "Advanced Life Support Unit", "Hydraulic Rescue Cutter"
+  type                String     // VEHICLE | MEDICAL_KIT | HEAVY_EQUIPMENT | DRONE | WATER_PUMP
+  status              String     @default("OPERATIONAL") // OPERATIONAL | IN_USE | MAINTENANCE
+  assignedResponderId String?
+  assignedResponder   Responder? @relation(fields: [assignedResponderId], references: [id], onDelete: SetNull)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
+
+// Assignment Model linking Incidents to Responders via Optimization / Coordinator Dispatch
+model Assignment {
+  id                      String    @id @default(uuid())
+  incidentId              String
+  incident                Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  responderId             String
+  responder               Responder @relation(fields: [responderId], references: [id], onDelete: Cascade)
+  status                  String    @default("RECOMMENDED") // RECOMMENDED | DISPATCHED | ACKNOWLEDGED | EN_ROUTE | ON_SCENE | COMPLETED | CANCELLED
+  
+  assignedByCoordinatorId String?
+  assignedByCoordinator   User?     @relation("CoordinatorAssignments", fields: [assignedByCoordinatorId], references: [id], onDelete: SetNull)
+  
+  recommendationScore     Float?    // Output metric from Hungarian / ILP optimizer
+  assignedAt              DateTime  @default(now())
+  acknowledgedAt          DateTime?
+  completedAt             DateTime?
+  notes                   String?
+}
+
+// Privacy-Aware Location Tracking Log (Subject to 48h Retention Policy - Section 4.11)
+model LocationLog {
+  id          String    @id @default(uuid())
+  incidentId  String?
+  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  responderId String?
+  responder   Responder?@relation(fields: [responderId], references: [id], onDelete: Cascade)
+  lat         Float
+  lng         Float
+  accuracy    Float?
+  source      String    @default("GPS") // GPS | MANUAL | ESTIMATED
+  timestamp   DateTime  @default(now())
+  isActive    Boolean   @default(true)  // Flagged false on purge / incident closure
+}
+
+// Audit Trail for Security, Dispatch Overrides, and Privacy Verification
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       String   // DISPATCH_OVERRIDE | STATUS_CHANGE | LOCATION_ACCESSED | USER_LOGIN | PRIVACY_PURGE
+  resourceType String   // INCIDENT | ASSIGNMENT | RESPONDER | USER
+  resourceId   String?
+  details      String?  // JSON context or description
+  ipAddress    String?
+  timestamp    DateTime @default(now())
+}

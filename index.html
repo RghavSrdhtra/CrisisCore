@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NexCommand | Rapid Crisis Response</title>
+  <title>CrisisCore</title>
   
   <!-- SEO & Meta -->
-  <meta name="description" content="NexCommand - A rapid crisis response and intelligent resource allocation dashboard for emergency management." />
+  <meta name="description" content="CrisisCore - A rapid crisis response and intelligent resource allocation dashboard for emergency management." />
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,7 +30,8 @@
     <aside class="sidebar">
       <div class="brand">
         <i class="ph-fill ph-shield-warning neon-icon"></i>
-        <h1>NexCommand</h1>
+        <h1>CrisisCore</h1>
+        <span style="font-size: 11px; color: var(--text-dim); margin-left: -6px;">v1</span>
       </div>
       
       <nav class="side-nav">
@@ -49,7 +50,7 @@
         </div>
         <div class="health-indicator">
           <div class="pulse-dot green"></div>
-          <span>AI Engine Active</span>
+          <span>Gemini API</span>
         </div>
       </div>
     </aside>
@@ -61,17 +62,70 @@
       <header class="topbar">
         <div class="search-bar">
           <i class="ph ph-magnifying-glass"></i>
-          <input type="text" placeholder="Search incidents, units, or zones..." />
+          <input type="text" placeholder="Search incidents, resources..." />
         </div>
         
         <div class="topbar-actions">
-          <button class="btn-icon"><i class="ph ph-bell-ringing"></i></button>
-          <div class="user-profile">
-            <img src="https://ui-avatars.com/api/?name=Admin+Operator&background=0D8ABC&color=fff" alt="Admin" />
-            <span>Admin Operator</span>
+          <button class="btn-icon" id="quickAuthBtn" title="Switch Account / Login"><i class="ph ph-user-switch"></i></button>
+          
+          <!-- User Profile & Dropdown -->
+          <div class="profile-container">
+            <button class="user-profile-btn" id="userProfileBtn" title="Click to view profile & accounts">
+              <img id="topbarAvatar" src="https://ui-avatars.com/api/?name=Marcus+Wright&background=a855f7&color=0f172a&bold=true&size=30" alt="Avatar" />
+              <div class="user-info-text">
+                <span class="user-name" id="topbarUserName">Marcus Wright</span>
+                <span class="user-role-badge badge-admin" id="topbarUserRole">ADMIN</span>
+              </div>
+              <i class="ph ph-caret-down" style="font-size: 11px; color: var(--text-dim); margin-left: 2px;"></i>
+            </button>
+            
+            <!-- Floating Profile Dropdown -->
+            <div class="profile-dropdown" id="profileDropdown" style="display: none;">
+              <div class="dropdown-header">
+                <div class="dropdown-user-main">
+                  <strong id="dropdownName">Marcus Wright</strong>
+                  <span id="dropdownEmail">admin@test.com</span>
+                </div>
+                <span class="role-pill badge-admin" id="dropdownRolePill">ADMIN</span>
+              </div>
+              <div class="dropdown-details">
+                <div class="detail-row">
+                  <span class="label">Agency:</span>
+                  <span class="val" id="dropdownAgency">National Emergency Operations Authority</span>
+                </div>
+                <div class="detail-row">
+                  <span class="label">Badge / ID:</span>
+                  <span class="val" id="dropdownBadge">ADM-001</span>
+                </div>
+                <div class="detail-row">
+                  <span class="label">Session:</span>
+                  <span class="val text-success"><i class="ph-fill ph-check-circle"></i> Active Session</span>
+                </div>
+              </div>
+              <div class="dropdown-actions">
+                <button class="dropdown-btn btn-switch" id="openAuthModalBtn">
+                  <i class="ph ph-arrows-left-right"></i> Switch Account
+                </button>
+                <button class="dropdown-btn btn-logout" id="logoutBtn">
+                  <i class="ph ph-sign-out"></i> Reset to Default
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
+
+      <!-- Active Role Operational Banner -->
+      <div id="roleBanner" class="role-banner banner-admin">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i class="ph-fill ph-shield-star" id="roleBannerIcon" style="font-size: 16px;"></i>
+          <span id="roleBannerText">Operational Mode: <strong>ADMIN</strong> &nbsp;•&nbsp; National Emergency Operations Authority &nbsp;•&nbsp; Full System Governance & Fleet Control</span>
+        </div>
+        <div class="banner-actions">
+          <button class="banner-btn" id="openAuditBtn" style="display: inline-flex; align-items: center; gap: 4px;"><i class="ph-fill ph-file-lock"></i> Privacy Logs</button>
+          <button class="banner-btn" id="bannerSwitchBtn">Switch Role</button>
+        </div>
+      </div>
 
       <!-- Coming Soon View -->
       <div id="comingSoonView" class="glass-panel" style="display: none; align-items: center; justify-content: center; flex: 1;">
@@ -96,7 +150,7 @@
           <!-- Map View -->
           <section class="glass-panel map-panel">
             <div class="panel-header">
-              <h2><i class="ph ph-crosshair"></i> Tactical Map</h2>
+              <h2><i class="ph ph-map-trifold"></i> Map</h2>
               <div class="map-controls">
                 <button class="btn-filter active">All</button>
                 <button class="btn-filter">Medical</button>
@@ -138,9 +192,299 @@
 
         </div>
       </div>
-    </main>
 
+      <!-- Responder View (Field Unit Terminal) -->
+      <div id="responderView" class="dashboard-grid" style="display: none;">
+        <div class="col-main">
+          <!-- Unit Telemetry Header -->
+          <div class="responder-unit-card glass-panel">
+            <div class="unit-status-header">
+              <div class="unit-meta">
+                <div class="unit-avatar"><i class="ph-fill ph-ambulance"></i></div>
+                <div>
+                  <h3 id="responderUnitName">Unit MEDIC-01 (Rapid EMS Ambulance)</h3>
+                  <p>Assigned Station: Sector 4 Central • Field Responder: <strong>Capt. Carlos Vance</strong></p>
+                </div>
+              </div>
+              <div class="unit-status-selector">
+                <span class="selector-label">Operational Status:</span>
+                <div class="status-btn-group" id="responderStatusBtnGroup">
+                  <button class="status-btn active" data-unit-status="available">AVAILABLE</button>
+                  <button class="status-btn" data-unit-status="en_route">EN ROUTE</button>
+                  <button class="status-btn" data-unit-status="on_scene">ON SCENE</button>
+                  <button class="status-btn" data-unit-status="unavailable">UNAVAILABLE</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mission Tactical Map -->
+          <section class="glass-panel map-panel" style="min-height: 400px;">
+            <div class="panel-header">
+              <h2><i class="ph ph-navigation-arrow"></i> Mission Tactical Route</h2>
+              <span class="badge" id="responderGPSBadge">GPS Telemetry: Active (28.6142 N, 77.2095 E)</span>
+            </div>
+            <div class="map-container" id="responderMap">
+              <!-- Reuses or embeds map -->
+            </div>
+          </section>
+        </div>
+
+        <div class="col-side">
+          <!-- Assigned Incident Card -->
+          <section class="glass-panel assigned-mission-panel">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-crosshair"></i> Current Assignment</h2>
+              <span class="badge badge-critical" id="assignedPriorityBadge">HIGH PRIORITY</span>
+            </div>
+            <div class="assigned-mission-content" id="assignedMissionContent">
+              <!-- Rendered via JS -->
+            </div>
+          </section>
+
+          <!-- Responder Backup Request Module (Section 4.8) -->
+          <section class="glass-panel backup-panel">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-hand-palm"></i> Request Additional Backup</h2>
+            </div>
+            <div class="backup-content">
+              <p>Section 4.8 Capability: Request immediate reinforcement if scene capacity is overwhelmed.</p>
+              <div class="backup-buttons">
+                <button class="btn-backup btn-backup-fire" id="requestFireBackupBtn">
+                  <i class="ph-fill ph-fire-truck"></i> Request Fire & Rescue
+                </button>
+                <button class="btn-backup btn-backup-police" id="requestPoliceBackupBtn">
+                  <i class="ph-fill ph-shield-warning"></i> Request Police Perimeter
+                </button>
+              </div>
+              <div id="backupAlert" class="auth-alert success" style="display: none; margin-top: 10px;"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Civilian SOS View -->
+      <div id="civilianView" class="dashboard-grid" style="display: none;">
+        <div class="col-main">
+          <!-- SOS Submission Form Card -->
+          <div class="glass-panel sos-form-panel">
+            <div class="sos-banner-header">
+              <div class="sos-icon-pulse"><i class="ph-fill ph-warning"></i></div>
+              <div>
+                <h2>Emergency Assistance Request (SOS)</h2>
+                <p>Submit emergency details to immediately alert Central Dispatch and nearest responders.</p>
+              </div>
+            </div>
+
+            <form id="civilianSOSForm" class="sos-form">
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label>Emergency Category</label>
+                  <div class="type-selector-pills" id="sosTypeSelector">
+                    <button type="button" class="type-pill active" data-type="Medical"><i class="ph-fill ph-first-aid"></i> Medical</button>
+                    <button type="button" class="type-pill" data-type="Fire"><i class="ph-fill ph-fire"></i> Fire</button>
+                    <button type="button" class="type-pill" data-type="Security"><i class="ph-fill ph-shield-warning"></i> Security</button>
+                    <button type="button" class="type-pill" data-type="Natural Disaster"><i class="ph-fill ph-waves"></i> Disaster</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label>Number of Affected Individuals</label>
+                  <input type="number" id="sosAffectedCount" class="input-styled" min="1" max="100" value="2" />
+                </div>
+                <div class="form-group flex-1">
+                  <label>Emergency Contact Phone (Optional)</label>
+                  <input type="tel" id="sosContact" class="input-styled" placeholder="+1-555-0101" value="+1-555-0101" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Situation Description</label>
+                <textarea id="sosDescription" class="input-styled" rows="3" placeholder="Briefly describe what happened, trapped victims, hazards..."></textarea>
+              </div>
+
+              <!-- Voluntary Location Toggle (Section 4.11) -->
+              <div class="privacy-location-card">
+                <div class="privacy-toggle-row">
+                  <div>
+                    <strong><i class="ph-fill ph-map-pin"></i> Voluntary Location Sharing (Sec. 4.11)</strong>
+                    <p>Transmit device coordinates to dispatch responders directly to your location. Terminates automatically once incident is resolved.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="sosLocationConsent" checked />
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-sos-submit" id="submitSOSBtn">
+                <i class="ph-fill ph-phone-call"></i> TRANSMIT EMERGENCY SOS
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-side">
+          <!-- Active Emergency Status Tracker -->
+          <section class="glass-panel civilian-status-panel">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-activity"></i> My Emergency Status</h2>
+              <span class="badge" id="civilianStatusBadge">MONITORING</span>
+            </div>
+            <div class="civilian-tracker-content" id="civilianTrackerContent">
+              <!-- Injected via JS -->
+            </div>
+          </section>
+
+          <!-- Citizen Safety Advice -->
+          <section class="glass-panel">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-lifebuoy"></i> Crisis Guidelines</h2>
+            </div>
+            <div style="padding: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+              <p>• Stay calm and remain in a safe, visible location if possible.</p>
+              <p style="margin-top: 8px;">• Keep your phone line clear for coordinator instructions.</p>
+              <p style="margin-top: 8px;">• Follow instructions provided by arriving first responders.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
   </div>
+
+  <!-- Admin Privacy & Audit Logs Modal -->
+  <div class="auth-modal-backdrop" id="auditModal" style="display: none;">
+    <div class="auth-modal" style="width: 720px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-file-lock" style="color: #a855f7;"></i>
+          <div>
+            <h3>Security & Privacy Audit Ledger</h3>
+            <p>Section 4.11 Compliance • 48-Hour Retention & Dispatch Verification</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeAuditModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <div class="audit-actions-bar">
+          <span style="font-size: 12px; color: var(--text-secondary);">Active retention policy: 48h GPS purging</span>
+          <button class="btn-purge" id="purgeLogsBtn">
+            <i class="ph-fill ph-trash"></i> Purge Stale Breadcrumbs (>48h)
+          </button>
+        </div>
+        <div class="audit-table-wrap">
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Actor</th>
+                <th>Event Action</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simple Login Modal -->
+  <div class="auth-modal-backdrop" id="authModal" style="display: none;">
+    <div class="auth-modal">
+      <div class="auth-modal-header">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-shield-check"></i>
+          <div>
+            <h3>CrisisCore Login</h3>
+            <p>Sign in to your account</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeAuthModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="auth-modal-body">
+        <!-- Standard Login Form -->
+        <form id="authLoginForm" class="auth-form">
+          <div class="form-group">
+            <label>Email Address</label>
+            <div class="input-wrap">
+              <i class="ph ph-envelope-simple"></i>
+              <input type="email" id="loginEmail" placeholder="admin@test.com" required value="admin@test.com" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <div class="input-wrap">
+              <i class="ph ph-lock-key"></i>
+              <input type="password" id="loginPassword" placeholder="Enter password" required value="password123" />
+            </div>
+          </div>
+          <div id="authAlert" class="auth-alert" style="display: none;"></div>
+          <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">
+            <span>Sign In</span>
+            <i class="ph ph-arrow-right"></i>
+          </button>
+        </form>
+
+        <div class="auth-divider">
+          <span>OR SWITCH DEMO ACCOUNT</span>
+        </div>
+
+        <!-- Quick Demo Accounts -->
+        <div class="quick-role-cards">
+          <div class="role-card" data-role="ADMIN" data-email="admin@test.com">
+            <div class="role-icon-box admin-box"><i class="ph-fill ph-shield-star"></i></div>
+            <div class="role-card-info">
+              <div class="role-card-top">
+                <span class="name">Marcus Wright</span>
+                <span class="user-role-badge badge-admin">Admin</span>
+              </div>
+              <span class="desc">System Administrator • Fleet & Operations Governance</span>
+            </div>
+          </div>
+
+          <div class="role-card" data-role="COORDINATOR" data-email="coordinator@test.com">
+            <div class="role-icon-box coordinator-box"><i class="ph-fill ph-crosshair"></i></div>
+            <div class="role-card-info">
+              <div class="role-card-top">
+                <span class="name">Sarah Connor</span>
+                <span class="user-role-badge badge-coordinator">Coordinator</span>
+              </div>
+              <span class="desc">Emergency Dispatcher • Tactical Incident Coordination</span>
+            </div>
+          </div>
+
+          <div class="role-card" data-role="RESPONDER" data-email="responder@test.com">
+            <div class="role-icon-box responder-box"><i class="ph-fill ph-ambulance"></i></div>
+            <div class="role-card-info">
+              <div class="role-card-top">
+                <span class="name">Capt. Carlos Vance</span>
+                <span class="user-role-badge badge-responder">Responder</span>
+              </div>
+              <span class="desc">Field Paramedic Unit MEDIC-01 • Dispatch & Telemetry</span>
+            </div>
+          </div>
+
+          <div class="role-card" data-role="CIVILIAN" data-email="civilian@test.com">
+            <div class="role-icon-box civilian-box"><i class="ph-fill ph-user"></i></div>
+            <div class="role-card-info">
+              <div class="role-card-top">
+                <span class="name">Jane Doe</span>
+                <span class="user-role-badge badge-civilian">Civilian</span>
+              </div>
+              <span class="desc">Citizen SOS Portal • Voluntary Location Reporting</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -1,87 +1,189 @@
 <div align="center">
-  <img src="https://img.icons8.com/color/96/000000/shield.png" alt="Shield Icon" width="80" />
-  <h1>NexCommand 🚨</h1>
-  <p><strong>Intelligent Rapid Crisis Response & Resource Allocation Dashboard</strong></p>
+  <img src="https://img.icons8.com/color/96/000000/shield.png" alt="CrisisCore" width="80" />
+  <h1>CrisisCore</h1>
+  <p><strong>Crisis Response and Resource Allocation Dashboard</strong></p>
 
   [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel)](https://nex-command-git-main-rsardhotra-3687s-projects.vercel.app/)
-  [![Built with Vite](https://img.shields.io/badge/Built_with-Vite-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
-  [![AI Powered](https://img.shields.io/badge/AI_Powered-Gemini_Flash-8E75B2?style=for-the-badge&logo=google)](https://aistudio.google.com/)
+  [![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
+  [![Node](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+  [![Gemini](https://img.shields.io/badge/AI-Gemini_Flash-8E75B2?style=for-the-badge&logo=google)](https://aistudio.google.com/)
+  [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 </div>
 
 <br/>
 
-**NexCommand** is an intelligent, rapid crisis response platform designed to aggregate emergency feeds and instantly allocate resources. During an urban crisis, control rooms are flooded with fragmented data, causing critical delays. NexCommand bridges this gap by acting as an AI-assisted "control tower."
+CrisisCore is a real-time crisis management dashboard for emergency coordinators. It aggregates live incident feeds, matches crises to the nearest available resources, and gives responders AI-generated situation briefs on demand.
+
+It is built as a college minor project but is structured like a production system: role-based access control, JWT auth, a real Express/Socket.IO backend, a Prisma ORM layer, and a Python ML service stub for predictive prioritization.
 
 ---
 
-## 🔗 Live Prototype
-**Experience the live prototype here: [NexCommand on Vercel](https://nex-command-git-main-rsardhotra-3687s-projects.vercel.app/)**
+## Screenshots
+
+| Tactical Map | Live Incidents | Resource Allocation |
+|---|---|---|
+| ![Map](./screenshots/map.png) | ![Incidents](./screenshots/live_incidents.png) | ![Resources](./screenshots/resource_allocation.png) |
 
 ---
 
-## 🌟 Core Features
+## Features
 
-### 1. Interactive Tactical Map
-Powered by Leaflet.js with CartoDB Dark Matter tiles, providing geographic awareness in a high-stress environment.
-![Tactical Map](./screenshots/map.png)
-
-### 2. Gemini AI Situation Briefs & Live Feed
-Uses Google's live `gemini-flash-latest` model. Click **"AI Brief"** to instantly analyze incident parameters and generate immediate tactical response advice.
-![Live Incidents](./screenshots/live_incidents.png)
-
-### 3. Intelligent Resource Dispatch
-Automated matching of crises with the nearest available physical assets (Ambulances, Fire Engines, Drones). 
-![Resource Allocation](./screenshots/resource_allocation.png)
-
-### 4. Glassmorphism UI
-A premium, dark-themed command center built to reduce operator eye strain and highlight severe alerts using neon accents.
+- **Live Incident Feed** - incidents stream in over WebSocket in real time
+- **Tactical Map** - Leaflet.js map with CartoDB Dark Matter tiles; markers update as incidents arrive
+- **AI Situation Briefs** - one-click Gemini Flash analysis per incident with tactical recommendations
+- **Smart Resource Dispatch** - auto-matches incidents to nearest available unit (ambulance, fire engine, drone)
+- **Role-Based Access** - three roles: Admin, Coordinator, Responder, each with scoped permissions
+- **Audit Log** - every assignment and status change is recorded
+- **Glassmorphism UI** - dark theme, neon severity accents, designed for low-light control rooms
 
 ---
 
-## 🚀 Quick Start (For Local Testing)
+## Tech Stack
 
-While the live Vercel link is the easiest way to experience NexCommand, you can also run it locally.
+| Layer | Tech |
+|---|---|
+| Frontend | Vanilla HTML/CSS/JS, Vite 8 |
+| Backend | Node.js, Express, Socket.IO |
+| Database | SQLite (dev) / PostgreSQL (prod), via Prisma ORM |
+| Auth | JWT (RS-style secret, RBAC middleware) |
+| AI | Google Gemini Flash API (via Vercel Serverless + local proxy) |
+| Maps | Leaflet.js, CartoDB basemaps |
+| ML stub | Python (FastAPI), scikit-learn |
+
+---
+
+## Project Structure
+
+```
+CrisisCore/
+├── index.html          # Single-page frontend app
+├── src/
+│   ├── main.js         # All frontend logic
+│   └── style.css       # Dark theme, glassmorphism
+├── api/
+│   └── gemini.js       # Vercel serverless function (AI proxy)
+├── server/             # Full Express backend
+│   ├── src/
+│   │   ├── index.js    # App entry, Socket.IO setup
+│   │   ├── routes/     # REST endpoints (incidents, responders, assignments, auth)
+│   │   ├── middleware/ # JWT auth, RBAC
+│   │   ├── constants/  # Roles, permissions, statuses
+│   │   └── ws/         # WebSocket broadcaster
+│   └── prisma/
+│       ├── schema.prisma
+│       └── seed.js
+├── ml/                 # Python ML service (priority prediction)
+│   ├── requirements.txt
+│   └── README.md
+├── screenshots/
+├── start.bat           # Windows one-click start
+└── start.sh            # Mac/Linux one-click start
+```
+
+---
+
+## Local Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) must be installed on your machine.
-- A free Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
 
-### Setup
-1. Clone this repository.
-2. Create a `.env.local` file in the root directory and add your key:
-   ```env
-   VITE_GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
-   ```
+- [Node.js 18+](https://nodejs.org/)
+- A Gemini API key from [Google AI Studio](https://aistudio.google.com/) (free)
 
-### For Windows:
-Double-click the `start.bat` file in the root folder, OR run:
-```cmd
-start.bat
-```
+### Option A: Frontend only (quickest)
 
-### For Mac / Linux:
+This runs the Vite dev server with mocked data. No backend or database needed.
+
 ```bash
-chmod +x start.sh
-./start.sh
-```
-
-### Manual Boot:
-```bash
+git clone https://github.com/YOUR_USERNAME/CrisisCore.git
+cd CrisisCore
 npm install
+```
+
+Create `.env.local` in the root:
+
+```env
+GEMINI_API_KEY="your_key_here"
+```
+
+Then start:
+
+```bash
+# Windows
+start.bat
+
+# Mac / Linux
+chmod +x start.sh && ./start.sh
+
+# Manual
 npm run dev
 ```
 
-The terminal will provide a local URL (usually `http://localhost:5173/`).
+Open `http://localhost:5173`.
 
 ---
 
-## 🛠️ Tech Stack
-- **Build Tool**: Vite
-- **Frontend**: Vanilla HTML, CSS3 (Custom Properties & Glassmorphism), ES6 JavaScript
-- **Mapping**: Leaflet.js
-- **Artificial Intelligence**: Google Gemini 1.5 Flash API
+### Option B: Full stack (backend + WebSocket + DB)
+
+**1. Set up the server**
+
+```bash
+cd server
+npm install
+```
+
+Copy the example env file and fill it in:
+
+```bash
+cp .env.example .env
+```
+
+`.env` fields:
+
+```env
+PORT=3001
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="your-own-secret-here"
+CLIENT_ORIGIN="http://localhost:5173"
+```
+
+**2. Init the database and seed it**
+
+```bash
+npm run prisma:push    # creates the SQLite schema
+npm run prisma:seed    # loads demo users + incidents
+```
+
+**3. Start both servers**
+
+From the root:
+
+```bash
+npm run dev            # starts Vite frontend on :5173
+npm run server:dev     # starts Express backend on :3001
+```
+
+Or use two terminals if you prefer.
+
+**Default demo credentials after seeding:**
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@crisiscore.dev | admin123 |
+| Coordinator | coord@crisiscore.dev | coord123 |
+| Responder | responder@crisiscore.dev | resp123 |
 
 ---
 
-## 🔒 Security Note
-This prototype is built primarily using open-source libraries and free-tier CDN assets (like CartoDB basemaps and Phosphor Icons). The Gemini API key must be supplied locally via `.env.local` or securely injected via Vercel Environment Variables, keeping the public codebase 100% secure.
+## Deployment
+
+The frontend deploys to Vercel with zero config. The `api/gemini.js` serverless function handles the AI proxy so the API key stays server-side.
+
+Set `GEMINI_API_KEY` in your Vercel project environment variables.
+
+For the backend, deploy `server/` to any Node host (Railway, Render, fly.io). Set the env vars from `.env.example`.
+
+---
+
+## License
+
+MIT
