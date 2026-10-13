@@ -25,13 +25,27 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# --- Android Build & Gradle ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.cxx/
+*.apk
+*.aab
+
 # --- Python ---
 ml/__pycache__/
 ml/.venv/
+ml/venv/
+venv/
+.venv/
 *.pyc
 *.pyo
 *.pyd
 __pycache__/
+ml/models/*.joblib
+ml/models/*.pkl
 
 # --- Graphify (generated knowledge graph, local only) ---
 graphify-out/
