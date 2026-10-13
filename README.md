@@ -40,7 +40,7 @@
 - Explicit notification of legal abandonment deterrents and administrative fine warnings (₹25,000 / $500 penalty).
 - Cryptographic timestamped `AuditLog` records for compliance.
 
-### 5. Machine Learning Incident Triage (Week 4 Pipeline)
+### 5. Machine Learning Incident Triage (WIP)
 - Preprocessing pipeline for emergency incidents (type, headcount, temporal harmonics, description TF-IDF).
 - Logistic Regression baseline, Random Forest, and Gradient Boosting models.
 - Sub-5ms real-time inference API via Python FastAPI microservice.
