@@ -63,6 +63,7 @@ model Incident {
   // Relationships
   assignments           Assignment[]
   locationLogs          LocationLog[]
+  chatMessages          ChatMessage[]
 }
 
 // Responder Model representing emergency units & field personnel
@@ -117,6 +118,7 @@ model Assignment {
   assignedAt              DateTime  @default(now())
   acknowledgedAt          DateTime?
   completedAt             DateTime?
+  declineReason           String?   // Reason provided if respondent declines assignment
   notes                   String?
 }
 
@@ -146,4 +148,17 @@ model AuditLog {
   details      String?  // JSON context or description
   ipAddress    String?
   timestamp    DateTime @default(now())
+}
+
+// Real-Time Communication Messages across Ops and Civilian Channels
+model ChatMessage {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  channel    String   // "OPS" (Admin/Coordinator <-> Respondent) or "CIVILIAN" (Respondent <-> Civilian)
+  senderId   String?
+  senderName String
+  senderRole String   // "ADMIN" | "COORDINATOR" | "RESPONDER" | "CIVILIAN"
+  message    String
+  createdAt  DateTime @default(now())
 }

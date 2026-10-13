@@ -73,9 +73,9 @@ async function main() {
 
   console.log('✅ Seeded 4 RBAC Users (Civilian, Coordinator, Responder, Admin).');
 
-  // 2. Seed Responders Fleet (Section 4.3)
-  const baseLat = 40.7128;
-  const baseLng = -74.0060;
+  // 2. Seed Registered Responder Fleet (tied to registered user Carlos Vance)
+  const baseLat = 28.6139; // Delhi coordinates aligned with dashboard
+  const baseLng = 77.2090;
 
   const responder1 = await prisma.responder.create({
     data: {
@@ -84,85 +84,13 @@ async function main() {
       type: 'MEDICAL_AMBULANCE',
       capability: 'Triage, Advanced Life Support, Defibrillator, Trauma Care',
       status: 'AVAILABLE',
-      lat: baseLat + 0.012,
-      lng: baseLng - 0.015,
+      lat: baseLat + 0.005,
+      lng: baseLng - 0.004,
       userId: responderUser.id
     }
   });
 
-  const responder2 = await prisma.responder.create({
-    data: {
-      callsign: 'MEDIC-02',
-      name: 'Rapid EMS Van Beta',
-      type: 'MEDICAL_AMBULANCE',
-      capability: 'Basic Life Support, Patient Transport, Oxygen Supplies',
-      status: 'ASSIGNED',
-      lat: baseLat - 0.008,
-      lng: baseLng + 0.018
-    }
-  });
-
-  const responder3 = await prisma.responder.create({
-    data: {
-      callsign: 'FIRE-01',
-      name: 'Heavy Engine 12',
-      type: 'FIRE_RESCUE',
-      capability: 'Structural Firefighting, Water Cannon 4000L, Thermal Sensor',
-      status: 'AVAILABLE',
-      lat: baseLat - 0.015,
-      lng: baseLng - 0.022
-    }
-  });
-
-  const responder4 = await prisma.responder.create({
-    data: {
-      callsign: 'FIRE-02',
-      name: 'Ladder Company 04',
-      type: 'FIRE_RESCUE',
-      capability: 'High-Rise Rescue, 32m Turntable Ladder, Breathing Apparatus',
-      status: 'AVAILABLE',
-      lat: baseLat + 0.025,
-      lng: baseLng + 0.010
-    }
-  });
-
-  const responder5 = await prisma.responder.create({
-    data: {
-      callsign: 'RESCUE-ALPHA',
-      name: 'Disaster Technical Rescue Team',
-      type: 'DISASTER_PERSONNEL',
-      capability: 'Confined Space Rescue, Hydraulic Cutters, Canine Search',
-      status: 'AVAILABLE',
-      lat: baseLat + 0.005,
-      lng: baseLng + 0.030
-    }
-  });
-
-  const responder6 = await prisma.responder.create({
-    data: {
-      callsign: 'POLICE-09',
-      name: 'Tactical Perimeter Patrol 9',
-      type: 'POLICE_SECURITY',
-      capability: 'Perimeter Lockdown, Traffic Divert, Crowd Management',
-      status: 'AVAILABLE',
-      lat: baseLat - 0.020,
-      lng: baseLng - 0.005
-    }
-  });
-
-  const responder7 = await prisma.responder.create({
-    data: {
-      callsign: 'DRONE-01',
-      name: 'Air Reconnaissance Drone Unit',
-      type: 'SPECIALIZED_EQUIPMENT',
-      capability: 'Thermal Infrared Mapping, Real-time Aerial Feed, Gas Sensor',
-      status: 'AVAILABLE',
-      lat: baseLat + 0.018,
-      lng: baseLng - 0.008
-    }
-  });
-
-  console.log('✅ Seeded 7 Responders across all service types.');
+  console.log('✅ Seeded 1 Registered Field Responder (MEDIC-01 linked to Carlos Vance).');
 
   // 3. Seed Specialized Resources
   await prisma.resource.createMany({
@@ -170,26 +98,8 @@ async function main() {
       {
         name: 'Paramedic ALS Mobile Kit',
         type: 'MEDICAL_KIT',
-        status: 'IN_USE',
+        status: 'OPERATIONAL',
         assignedResponderId: responder1.id
-      },
-      {
-        name: 'Hydraulic Heavy Rescue Extrication Tool',
-        type: 'HEAVY_EQUIPMENT',
-        status: 'OPERATIONAL',
-        assignedResponderId: responder5.id
-      },
-      {
-        name: 'Infrared Aerial Surveillance Sensor Pod',
-        type: 'DRONE',
-        status: 'OPERATIONAL',
-        assignedResponderId: responder7.id
-      },
-      {
-        name: 'High-Pressure 5000 GPM Water Pump',
-        type: 'WATER_PUMP',
-        status: 'OPERATIONAL',
-        assignedResponderId: responder3.id
       }
     ]
   });
@@ -272,22 +182,7 @@ async function main() {
 
   console.log('✅ Seeded 4 Crisis Incidents.');
 
-  // 5. Seed Active Assignment linking MEDIC-02 to INC-2026-002
-  await prisma.assignment.create({
-    data: {
-      incidentId: inc2.id,
-      responderId: responder2.id,
-      status: 'EN_ROUTE',
-      assignedByCoordinatorId: coordinatorUser.id,
-      recommendationScore: 0.92,
-      acknowledgedAt: new Date(Date.now() - 5 * 60 * 1000),
-      notes: 'Dispatched immediately by Coordinator. ETA 4 mins.'
-    }
-  });
-
-  console.log('✅ Seeded Assignment (MEDIC-02 -> INC-2026-002).');
-
-  // 6. Seed Privacy-Aware Location Logs (Breadcrumbs)
+  // 5. Seed Privacy-Aware Location Logs (Breadcrumbs)
   await prisma.locationLog.createMany({
     data: [
       {
@@ -299,9 +194,9 @@ async function main() {
         isActive: true
       },
       {
-        responderId: responder2.id,
-        lat: responder2.lat,
-        lng: responder2.lng,
+        responderId: responder1.id,
+        lat: responder1.lat,
+        lng: responder1.lng,
         accuracy: 3.0,
         source: 'GPS',
         isActive: true
@@ -311,14 +206,14 @@ async function main() {
 
   console.log('✅ Seeded LocationLog breadcrumbs.');
 
-  // 7. Seed Audit Log entry
+  // 6. Seed Audit Log entry
   await prisma.auditLog.create({
     data: {
       userId: coordinatorUser.id,
-      action: 'DISPATCH_CONFIRMED',
-      resourceType: 'ASSIGNMENT',
-      resourceId: inc2.id,
-      details: JSON.stringify({ responder: 'MEDIC-02', priority: 'HIGH', algorithmScore: 0.92 })
+      action: 'SYSTEM_BOOT',
+      resourceType: 'INCIDENT',
+      resourceId: inc1.id,
+      details: JSON.stringify({ note: 'Initial incident triage and coordination readiness' })
     }
   });
 

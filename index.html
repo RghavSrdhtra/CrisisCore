@@ -129,6 +129,9 @@
         </div>
       </div>
 
+      <!-- Real-Time Dispatcher Action Prompts Container -->
+      <div id="dispatcherPromptsArea" class="dispatcher-prompts-area"></div>
+
       <!-- Coming Soon View -->
       <div id="comingSoonView" class="glass-panel" style="display: none; align-items: center; justify-content: center; flex: 1;">
         <div style="text-align: center; color: var(--text-muted);">
@@ -186,6 +189,9 @@
           <section class="glass-panel resource-panel">
             <div class="panel-header">
               <h2><i class="ph ph-truck"></i> Resource Allocation</h2>
+              <button class="btn-reg-unit" id="openAddResponderModalBtn" title="Register New Dispatchable Respondent Unit">
+                <i class="ph ph-plus-circle"></i> + Unit
+              </button>
             </div>
             <div class="resource-list" id="resourceList">
               <!-- Injected via JS -->
@@ -242,6 +248,28 @@
             <div class="assigned-mission-content" id="assignedMissionContent">
               <!-- Rendered via JS -->
             </div>
+          </section>
+
+          <!-- Dual-Channel Real-Time Responder Chat -->
+          <section class="glass-panel responder-chat-panel">
+            <div class="chat-header-tabs">
+              <button class="chat-tab-btn active" id="tabOpsChat" data-channel="OPS">
+                <i class="ph-fill ph-shield-star"></i> Tactical Ops (Dispatch)
+              </button>
+              <button class="chat-tab-btn" id="tabCivChat" data-channel="CIVILIAN">
+                <i class="ph-fill ph-user-sound"></i> Civilian Line
+                <span class="chat-unread-dot" id="civUnreadDot" style="display: none;"></span>
+              </button>
+            </div>
+            
+            <div class="chat-stream" id="responderChatStream">
+              <!-- Injected via JS -->
+            </div>
+
+            <form id="responderChatForm" class="chat-input-form">
+              <input type="text" id="responderChatInput" class="chat-input" placeholder="Type tactical message..." autocomplete="off" />
+              <button type="submit" class="chat-send-btn" id="responderChatSendBtn"><i class="ph-fill ph-paper-plane-right"></i></button>
+            </form>
           </section>
 
           <!-- Responder Backup Request Module (Section 4.8) -->
@@ -483,6 +511,138 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tactical Ops Chat Modal (Coordinator <-> Responder) -->
+  <div class="auth-modal-backdrop" id="tacticalChatModal" style="display: none;">
+    <div class="auth-modal" style="width: 580px; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-chats-circle" style="color: var(--blue);"></i>
+          <div>
+            <h3 id="tacticalChatTitle">Tactical Operations Channel</h3>
+            <p id="tacticalChatSubtitle">Direct coordinator line with assigned field unit</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeTacticalChatModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="tactical-chat-body">
+        <div class="chat-meta-bar" id="tacticalChatMetaBar">
+          <!-- Injected via JS -->
+        </div>
+        <div class="chat-stream modal-stream" id="coordinatorChatStream">
+          <!-- Messages injected via JS -->
+        </div>
+        <form id="coordinatorChatForm" class="chat-input-form modal-chat-input">
+          <input type="text" id="coordinatorChatInput" class="chat-input" placeholder="Transmit tactical directive to unit..." autocomplete="off" />
+          <button type="submit" class="chat-send-btn"><i class="ph-fill ph-paper-plane-right"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Register New Field Respondent Unit Modal -->
+  <div class="auth-modal-backdrop" id="registerResponderModal" style="display: none;">
+    <div class="auth-modal" style="width: 520px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-plus-circle" style="color: var(--green);"></i>
+          <div>
+            <h3>Register Respondent Unit</h3>
+            <p>Onboard a new field unit into the live dispatch fleet</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeRegisterResponderModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="auth-modal-body">
+        <form id="registerResponderForm" class="auth-form">
+          <div class="form-row" style="display: flex; gap: 12px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Responder Name</label>
+              <div class="input-wrap">
+                <i class="ph ph-user"></i>
+                <input type="text" id="regRespName" placeholder="e.g. Lt. Miller" required />
+              </div>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Unit Callsign</label>
+              <div class="input-wrap">
+                <i class="ph ph-identification-badge"></i>
+                <input type="text" id="regRespCallsign" placeholder="e.g. FIRE-02" required style="text-transform: uppercase;" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Service Type</label>
+            <div class="input-wrap">
+              <i class="ph ph-ambulance"></i>
+              <select id="regRespType" class="input-styled" style="width: 100%; height: 40px; background: transparent; border: none; color: var(--text-main); padding-left: 36px;">
+                <option value="MEDICAL_AMBULANCE" selected>Medical Ambulance (EMS)</option>
+                <option value="FIRE_RESCUE">Fire & Rescue Engine</option>
+                <option value="POLICE_SECURITY">Police / Perimeter Security</option>
+                <option value="DISASTER_PERSONNEL">Disaster Personnel & Heavy Rescue</option>
+                <option value="SPECIALIZED_EQUIPMENT">Specialized Equipment / Drone</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row" style="display: flex; gap: 12px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Email Address</label>
+              <div class="input-wrap">
+                <i class="ph ph-envelope"></i>
+                <input type="email" id="regRespEmail" placeholder="unit@service.org" required />
+              </div>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Agency</label>
+              <div class="input-wrap">
+                <i class="ph ph-buildings"></i>
+                <input type="text" id="regRespAgency" placeholder="e.g. Metro Fire Rescue" />
+              </div>
+            </div>
+          </div>
+
+          <div id="regRespAlert" class="auth-alert" style="display: none; margin-bottom: 12px;"></div>
+
+          <button type="submit" class="auth-submit-btn" id="regRespSubmitBtn">
+            <span>Register & Add to Available Fleet</span>
+            <i class="ph ph-check"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decline Assignment Reason Modal -->
+  <div class="auth-modal-backdrop" id="declineAssignmentModal" style="display: none;">
+    <div class="auth-modal" style="width: 440px;">
+      <div class="auth-modal-header">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-warning" style="color: var(--red);"></i>
+          <div>
+            <h3>Decline Emergency Assignment</h3>
+            <p>Central Command will be notified immediately</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeDeclineModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="auth-modal-body">
+        <form id="declineAssignmentForm" class="auth-form">
+          <div class="form-group">
+            <label>Reason for Declining</label>
+            <textarea id="declineReasonInput" class="textarea-styled" rows="3" placeholder="e.g. Critical patient on board, road blocked, mechanical failure..." required></textarea>
+          </div>
+          <button type="submit" class="auth-submit-btn" style="background: var(--red); color: #fff;">
+            <span>Confirm Decline & Notify Dispatcher</span>
+            <i class="ph ph-arrow-right"></i>
+          </button>
+        </form>
       </div>
     </div>
   </div>

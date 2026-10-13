@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindGPSDetector();
   bindFormSubmit();
   bindTrackerActions();
+  bindCivilianChat();
   connectSocketIO();
 });
 
@@ -313,6 +314,14 @@ function activateTracker(incident) {
   }
 
   updateTimelineStatus(incident.status || 'REPORTED');
+
+  // Join civilian chat room and load existing messages
+  if (incident?.id) {
+    if (socket) {
+      socket.emit('chat:join', { incidentId: incident.id, channel: 'CIVILIAN' });
+    }
+    loadCivilianMessages(incident.id);
+  }
 }
 
 function updateTimelineStatus(status, details = {}) {
@@ -352,6 +361,10 @@ function updateTimelineStatus(status, details = {}) {
     stepDispatched?.classList.add('completed');
     if (details.responderCallsign && assignedUnitName) {
       assignedUnitName.innerHTML = `Dispatched: <strong>${details.responderCallsign}</strong> (${details.responderType || 'Rescue Unit'})`;
+    }
+    const chatMeta = document.getElementById('chatResponderMeta');
+    if (chatMeta && (details.responderName || details.responderCallsign)) {
+      chatMeta.textContent = `Direct link with ${details.responderName || details.responderCallsign} (${details.responderCallsign || 'MEDIC-01'})`;
     }
   } else if (upper === 'ON_SCENE') {
     stepReported?.classList.add('completed');
@@ -489,6 +502,7 @@ function connectSocketIO() {
 
       if (activeIncident?.id) {
         socket.emit('join:incident', { incidentId: activeIncident.id });
+        socket.emit('chat:join', { incidentId: activeIncident.id, channel: 'CIVILIAN', role: 'CIVILIAN' });
       }
     });
 
@@ -515,7 +529,127 @@ function connectSocketIO() {
       updateTimelineStatus('CANCELLED');
     });
 
+    // Real-time chat message on civilian channel
+    socket.on('chat:message', (newMsg) => {
+      if (activeIncident && newMsg.incidentId === activeIncident.id && newMsg.channel === 'CIVILIAN') {
+        renderCivilianChatMessage(newMsg);
+      }
+    });
+
+    socket.on('chat:civilian_update', (data) => {
+      if (activeIncident && data.incidentId === activeIncident.id && data.message) {
+        renderCivilianChatMessage(data.message);
+      }
+    });
+
   } catch (err) {
     console.warn('Socket.IO initialization error:', err);
+  }
+}
+
+// --- 9. Civilian Direct Responder Chat Channel ---
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderCivilianChatMessage(msg) {
+  const stream = document.getElementById('civilianChatStream');
+  if (!stream) return;
+
+  const emptyHint = stream.querySelector('.chat-empty-hint');
+  if (emptyHint) emptyHint.remove();
+
+  // Avoid duplicates if already rendered
+  if (msg.id && stream.querySelector(`[data-msg-id="${msg.id}"]`)) return;
+
+  const isSelf = msg.senderRole === 'CIVILIAN' || (msg.senderName && msg.senderName.toLowerCase().includes('civilian'));
+  const time = new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const msgEl = document.createElement('div');
+  if (msg.id) msgEl.setAttribute('data-msg-id', msg.id);
+  msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+  msgEl.innerHTML = `
+    <div class="chat-sender">${escapeHtml(msg.senderName || (isSelf ? 'You' : 'Field Responder'))} (${escapeHtml(msg.senderRole || 'PERSONNEL')})</div>
+    <div class="chat-bubble">${escapeHtml(msg.message)}</div>
+    <div class="chat-time">${time}</div>
+  `;
+  stream.appendChild(msgEl);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+async function loadCivilianMessages(incidentId) {
+  const stream = document.getElementById('civilianChatStream');
+  if (!stream || !incidentId) return;
+
+  try {
+    const res = await fetch(`/api/chat/${incidentId}?channel=CIVILIAN`);
+    const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      stream.innerHTML = '';
+      data.messages.forEach(m => renderCivilianChatMessage(m));
+    }
+  } catch (err) {
+    console.warn('Could not load chat messages:', err);
+  }
+}
+
+function bindCivilianChat() {
+  const form = document.getElementById('civilianChatForm');
+  const input = document.getElementById('civilianChatInput');
+  const quickChips = document.getElementById('quickChatChips');
+
+  if (quickChips) {
+    quickChips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.quick-chip');
+      if (!chip) return;
+      const msg = chip.getAttribute('data-msg');
+      if (msg && input) {
+        input.value = msg;
+        input.focus();
+      }
+    });
+  }
+
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input?.value.trim();
+      if (!text) return;
+      if (!activeIncident?.id) {
+        alert('Please submit your emergency SOS before transmitting messages.');
+        return;
+      }
+
+      input.value = '';
+
+      const payload = {
+        incidentId: activeIncident.id,
+        channel: 'CIVILIAN',
+        message: text,
+        senderName: 'Civilian (You)',
+        senderRole: 'CIVILIAN'
+      };
+
+      if (socket && socket.connected) {
+        socket.emit('chat:send', payload);
+      } else {
+        try {
+          const res = await fetch(`/api/chat/${activeIncident.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (data.message) {
+            renderCivilianChatMessage(data.message);
+          }
+        } catch (err) {
+          console.error('Error sending message:', err);
+        }
+      }
+    });
   }
 }

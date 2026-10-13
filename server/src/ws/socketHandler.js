@@ -1,4 +1,5 @@
-// Socket.IO Handler with RBAC Room Segmentation (Section 4.9 & Week 1 WebSocket Protocol)
+// Socket.IO Handler with RBAC Room Segmentation and Dual-Channel Chat
+import { prisma } from '../config/db.js';
 
 export function initializeWebSocket(io) {
   io.on('connection', (socket) => {
@@ -29,14 +30,63 @@ export function initializeWebSocket(io) {
       socket.emit('joined', { room, incidentId, timestamp: new Date().toISOString() });
     });
 
+    // 4. Dual-Channel Real-Time Chat Rooms
+    // channel = 'OPS' (Coordinator <-> Responder) or 'CIVILIAN' (Responder <-> Civilian)
+    socket.on('chat:join', ({ incidentId, channel }) => {
+      if (!incidentId || !channel) return;
+      const normalizedChannel = channel.toUpperCase() === 'CIVILIAN' ? 'CIVILIAN' : 'OPS';
+      const room = `chat:${normalizedChannel}:${incidentId}`;
+      socket.join(room);
+      console.log(`💬 Socket ${socket.id} joined chat room '${room}'`);
+      socket.emit('chat:joined', { room, incidentId, channel: normalizedChannel });
+    });
+
+    // Real-Time Chat Message Transmit
+    socket.on('chat:send', async ({ incidentId, channel, message, senderName, senderRole, senderId }) => {
+      if (!incidentId || !message || !message.trim()) return;
+      const normalizedChannel = (channel || 'OPS').toUpperCase() === 'CIVILIAN' ? 'CIVILIAN' : 'OPS';
+
+      try {
+        const savedMessage = await prisma.chatMessage.create({
+          data: {
+            incidentId,
+            channel: normalizedChannel,
+            senderId: senderId || null,
+            senderName: senderName || 'User',
+            senderRole: senderRole || 'COORDINATOR',
+            message: message.trim()
+          }
+        });
+
+        const room = `chat:${normalizedChannel}:${incidentId}`;
+        io.to(room).emit('chat:message', savedMessage);
+
+        // Notify coordinator dashboard if sent on OPS channel
+        if (normalizedChannel === 'OPS') {
+          io.to('coordinators').emit('chat:ops_update', {
+            incidentId,
+            message: savedMessage
+          });
+        }
+
+        // Notify civilian tracker if sent on CIVILIAN channel
+        if (normalizedChannel === 'CIVILIAN') {
+          io.to(`incident:${incidentId}`).emit('chat:civilian_update', {
+            incidentId,
+            message: savedMessage
+          });
+        }
+      } catch (err) {
+        console.error('Socket chat message save error:', err);
+      }
+    });
+
     // Handle voluntary location breadcrumb streaming
     socket.on('location:stream', ({ incidentId, responderId, lat, lng }) => {
       if (incidentId) {
-        // Broadcast to coordinators
         io.to('coordinators').emit('incident:location_updated', { incidentId, lat, lng });
       }
       if (responderId) {
-        // Broadcast to coordinators
         io.to('coordinators').emit('responder:location_updated', { responderId, lat, lng });
       }
     });
@@ -77,8 +127,20 @@ export const wsBroadcaster = {
     // Also notify civilian their incident has been dispatched
     io.to(`incident:${assignment.incidentId}`).emit('incident:status', {
       status: 'DISPATCHED',
+      responderId: assignment.responderId,
+      responderName: assignment.responder?.name,
       responderCallsign: assignment.responder?.callsign,
       responderType: assignment.responder?.type
+    });
+  },
+
+  // Notify coordinator dashboard with prompt when respondent updates status or accepts/declines
+  notifyResponderAction: (io, actionPayload) => {
+    if (!io) return;
+    // Broadcast prompt event to coordinators
+    io.to('coordinators').emit('assignment:responder_action', {
+      ...actionPayload,
+      timestamp: new Date().toISOString()
     });
   },
 
@@ -86,5 +148,11 @@ export const wsBroadcaster = {
   notifyResponderStatus: (io, responder) => {
     if (!io) return;
     io.to('coordinators').emit('responder:updated', responder);
+  },
+
+  // Notify newly registered responder
+  notifyNewResponder: (io, responder) => {
+    if (!io) return;
+    io.to('coordinators').emit('responder:registered', responder);
   }
 };

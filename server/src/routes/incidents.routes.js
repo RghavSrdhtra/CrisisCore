@@ -7,15 +7,15 @@ import { wsBroadcaster } from '../ws/socketHandler.js';
 const router = express.Router();
 
 // GET /api/incidents - RBAC scoped list
-router.get('/', authenticate, async (req, res) => {
+router.get('/', optionalAuthenticate, async (req, res) => {
   try {
     const user = req.user;
     let queryWhere = {};
 
-    if (user.role === ROLES.CIVILIAN) {
+    if (user && user.role === ROLES.CIVILIAN) {
       // Privacy Isolation (Section 4.11): Civilians only view their own reported incidents
       queryWhere = { reporterId: user.id };
-    } else if (user.role === ROLES.RESPONDER) {
+    } else if (user && user.role === ROLES.RESPONDER) {
       // Responders view incidents assigned to them
       const responder = await prisma.responder.findUnique({ where: { userId: user.id } });
       if (!responder) return res.json({ incidents: [] });
@@ -26,7 +26,7 @@ router.get('/', authenticate, async (req, res) => {
         }
       };
     }
-    // COORDINATOR and ADMIN see all incidents
+    // COORDINATOR, ADMIN, and dashboard preview see all incidents
 
     const incidents = await prisma.incident.findMany({
       where: queryWhere,

@@ -269,6 +269,32 @@
               </button>
             </div>
 
+            <!-- Real-Time Direct Chat with Arriving Responder (Channel: CIVILIAN) -->
+            <div class="civilian-responder-chat-card" id="civilianChatCard">
+              <div class="chat-card-header">
+                <div class="chat-header-meta">
+                  <i class="ph-fill ph-chat-teardrop-text text-green"></i>
+                  <div>
+                    <strong>Direct Responder Channel</strong>
+                    <span id="chatResponderMeta">Line open with arriving personnel</span>
+                  </div>
+                </div>
+                <span class="badge badge-success" id="chatLiveBadge">LIVE</span>
+              </div>
+              <div class="chat-stream civ-stream" id="civilianChatStream">
+                <div class="chat-empty-hint">Direct channel open. State immediate victim location or hazards.</div>
+              </div>
+              <div class="quick-chat-chips" id="quickChatChips">
+                <button type="button" class="quick-chip" data-msg="We are waiting at the front entrance.">At front gate</button>
+                <button type="button" class="quick-chip" data-msg="Patient is conscious and breathing.">Patient conscious</button>
+                <button type="button" class="quick-chip" data-msg="Exit is blocked by smoke/debris.">Exit blocked</button>
+              </div>
+              <form id="civilianChatForm" class="chat-input-form">
+                <input type="text" id="civilianChatInput" class="chat-input" placeholder="Message arriving rescue unit..." autocomplete="off" />
+                <button type="submit" class="chat-send-btn" id="civilianChatSendBtn"><i class="ph-fill ph-paper-plane-right"></i></button>
+              </form>
+            </div>
+
             <!-- Cancel SOS Button -->
             <button type="button" class="btn-cancel-incident" id="btnCancelSOS">
               <i class="ph-fill ph-check-circle"></i> I Am Safe — Cancel SOS

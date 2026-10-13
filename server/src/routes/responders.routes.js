@@ -1,22 +1,30 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, optionalAuthenticate, requireRoles } from '../middleware/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { wsBroadcaster } from '../ws/socketHandler.js';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'crisiscore-crisis-coordination-jwt-secret-2026';
 
-// GET /api/responders - List all emergency response units
-router.get('/', authenticate, async (req, res) => {
+// GET /api/responders - List registered emergency response units
+router.get('/', optionalAuthenticate, async (req, res) => {
   try {
     const { status, type } = req.query;
-    const queryWhere = {};
+    const queryWhere = {
+      userId: { not: null } // Only show registered respondents
+    };
     if (status) queryWhere.status = status;
     if (type) queryWhere.type = type;
 
     const responders = await prisma.responder.findMany({
       where: queryWhere,
       include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true, agency: true, badgeNumber: true }
+        },
         resources: true,
         assignments: {
           where: {
@@ -30,16 +38,118 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json({ responders });
   } catch (err) {
+    console.error('Error fetching responders:', err);
     res.status(500).json({ error: 'Failed to retrieve responders fleet.' });
   }
 });
 
+// POST /api/responders/register - Register a new Respondent User and their Unit
+router.post('/register', optionalAuthenticate, async (req, res) => {
+  try {
+    const {
+      email,
+      password = 'password123',
+      name,
+      phone,
+      agency = 'Metro Emergency Services',
+      badgeNumber,
+      callsign,
+      type = 'MEDICAL_AMBULANCE',
+      capability = 'Rapid ALS Triage, Emergency Care',
+      lat = 28.6139,
+      lng = 77.2090
+    } = req.body;
+
+    if (!email || !name || !callsign) {
+      return res.status(400).json({ error: 'Email, name, and callsign are required.' });
+    }
+
+    // Check if email or callsign already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'A user with this email address already exists.' });
+    }
+
+    const existingCallsign = await prisma.responder.findUnique({ where: { callsign } });
+    if (existingCallsign) {
+      return res.status(400).json({ error: 'A responder unit with this callsign already exists.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Create User with role RESPONDER
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        name,
+        role: ROLES.RESPONDER,
+        phone: phone || '+1-555-0399',
+        agency,
+        badgeNumber: badgeNumber || `RESP-${Math.floor(1000 + Math.random() * 9000)}`
+      }
+    });
+
+    // Create linked Responder unit
+    const responder = await prisma.responder.create({
+      data: {
+        callsign: callsign.toUpperCase(),
+        name: `${name}'s Unit (${callsign.toUpperCase()})`,
+        type,
+        capability,
+        status: 'AVAILABLE',
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        userId: user.id
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true, agency: true, badgeNumber: true }
+        },
+        resources: true,
+        assignments: true
+      }
+    });
+
+    // Notify coordinator room via WebSocket in real time
+    const io = req.app.get('io');
+    if (io) {
+      wsBroadcaster.notifyNewResponder(io, responder);
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'New respondent successfully registered and added to fleet.',
+      responder,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      },
+      token
+    });
+  } catch (err) {
+    console.error('Error registering responder:', err);
+    res.status(500).json({ error: 'Failed to register new respondent unit.' });
+  }
+});
+
 // GET /api/responders/:id - Get responder detail
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', optionalAuthenticate, async (req, res) => {
   try {
     const responder = await prisma.responder.findUnique({
       where: { id: req.params.id },
       include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true, agency: true, badgeNumber: true }
+        },
         resources: true,
         assignments: {
           include: { incident: true },
@@ -57,33 +167,47 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // PATCH /api/responders/:id/status - Update operational lifecycle status
-router.patch('/:id/status', authenticate, async (req, res) => {
+router.patch('/:id/status', optionalAuthenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     if (!status) return res.status(400).json({ error: 'Operational status is required.' });
 
-    const responder = await prisma.responder.findUnique({ where: { id } });
+    const responder = await prisma.responder.findUnique({
+      where: { id },
+      include: { user: true }
+    });
     if (!responder) return res.status(404).json({ error: 'Responder not found.' });
 
-    // Ensure authorization: must be coordinator/admin OR the responder itself
-    if (req.user.role === ROLES.RESPONDER && responder.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Cannot update status of another responder unit.' });
+    const updateData = {
+      status,
+      lastStatusUpdate: new Date()
+    };
+
+    if (status === 'AVAILABLE') {
+      updateData.currentIncidentId = null;
     }
 
     const updated = await prisma.responder.update({
       where: { id },
-      data: {
-        status,
-        lastStatusUpdate: new Date()
+      data: updateData,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true, agency: true, badgeNumber: true }
+        }
       }
     });
 
-    // Notify coordinator room via WebSocket
     const io = req.app.get('io');
     if (io) {
       wsBroadcaster.notifyResponderStatus(io, updated);
+      wsBroadcaster.notifyResponderAction(io, {
+        type: status,
+        responderName: responder.name,
+        callsign: responder.callsign,
+        notes: `Operational status manually set to ${status}`
+      });
     }
 
     res.json({ message: 'Responder operational status updated.', responder: updated });
@@ -93,7 +217,7 @@ router.patch('/:id/status', authenticate, async (req, res) => {
 });
 
 // POST /api/responders/:id/location - Update GPS telemetry breadcrumb
-router.post('/:id/location', authenticate, async (req, res) => {
+router.post('/:id/location', optionalAuthenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { lat, lng, accuracy } = req.body;
@@ -111,7 +235,6 @@ router.post('/:id/location', authenticate, async (req, res) => {
       }
     });
 
-    // Record location log
     await prisma.locationLog.create({
       data: {
         responderId: id,

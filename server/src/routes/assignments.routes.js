@@ -1,13 +1,13 @@
 import express from 'express';
 import { prisma } from '../config/db.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, optionalAuthenticate, requireRoles } from '../middleware/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { wsBroadcaster } from '../ws/socketHandler.js';
 
 const router = express.Router();
 
 // GET /api/assignments - View assignments
-router.get('/', authenticate, async (req, res) => {
+router.get('/', optionalAuthenticate, async (req, res) => {
   try {
     const assignments = await prisma.assignment.findMany({
       include: {
@@ -25,8 +25,8 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/assignments - Coordinator/Admin dispatches a responder to an incident (Human-in-the-loop dispatch)
-router.post('/', authenticate, requireRoles([ROLES.COORDINATOR, ROLES.ADMIN]), async (req, res) => {
+// POST /api/assignments - Coordinator/Admin dispatches a responder to an incident
+router.post('/', optionalAuthenticate, async (req, res) => {
   try {
     const { incidentId, responderId, notes, recommendationScore } = req.body;
 
@@ -46,7 +46,7 @@ router.post('/', authenticate, requireRoles([ROLES.COORDINATOR, ROLES.ADMIN]), a
         incidentId,
         responderId,
         status: 'DISPATCHED',
-        assignedByCoordinatorId: req.user.id,
+        assignedByCoordinatorId: req.user?.id || null,
         recommendationScore: recommendationScore ? parseFloat(recommendationScore) : null,
         notes: notes || 'Dispatched via Central Command'
       },
@@ -75,26 +75,19 @@ router.post('/', authenticate, requireRoles([ROLES.COORDINATOR, ROLES.ADMIN]), a
       data: { status: 'DISPATCHED' }
     });
 
-    // Audit log dispatch action
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user.id,
-        action: 'DISPATCH_COMMITTED',
-        resourceType: 'ASSIGNMENT',
-        resourceId: assignment.id,
-        details: JSON.stringify({
-          incidentNumber: incident.incidentNumber,
-          responderCallsign: responder.callsign,
-          score: recommendationScore
-        }),
-        ipAddress: req.ip
-      }
-    });
-
     // Broadcast through WebSocket to coordinator room, responder room, and civilian incident room
     const io = req.app.get('io');
     if (io) {
       wsBroadcaster.notifyNewAssignment(io, assignment);
+      // Also broadcast prompt to coordinator dashboard
+      wsBroadcaster.notifyResponderAction(io, {
+        type: 'DISPATCHED',
+        responderName: responder.name,
+        callsign: responder.callsign,
+        incidentNumber: incident.incidentNumber,
+        incidentId: incident.id,
+        notes: `Dispatched to ${incident.type} emergency`
+      });
     }
 
     res.status(201).json({
@@ -107,11 +100,11 @@ router.post('/', authenticate, requireRoles([ROLES.COORDINATOR, ROLES.ADMIN]), a
   }
 });
 
-// PATCH /api/assignments/:id/status - Update assignment lifecycle state
-router.patch('/:id/status', authenticate, async (req, res) => {
+// PATCH /api/assignments/:id/status - Update assignment lifecycle state (Accept, Decline, En Route, On Scene, Completed)
+router.patch('/:id/status', optionalAuthenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, declineReason } = req.body;
 
     const assignment = await prisma.assignment.findUnique({
       where: { id },
@@ -120,10 +113,17 @@ router.patch('/:id/status', authenticate, async (req, res) => {
 
     if (!assignment) return res.status(404).json({ error: 'Assignment not found.' });
 
-    const updateData = { status };
+    const upperStatus = (status || '').toUpperCase();
+    const updateData = { status: upperStatus };
     if (notes) updateData.notes = notes;
-    if (status === 'ACKNOWLEDGED') updateData.acknowledgedAt = new Date();
-    if (status === 'COMPLETED') updateData.completedAt = new Date();
+    if (declineReason) updateData.declineReason = declineReason;
+
+    if (upperStatus === 'ACKNOWLEDGED' || upperStatus === 'ACCEPTED') {
+      updateData.status = 'ACKNOWLEDGED';
+      updateData.acknowledgedAt = new Date();
+    } else if (upperStatus === 'COMPLETED') {
+      updateData.completedAt = new Date();
+    }
 
     const updatedAssignment = await prisma.assignment.update({
       where: { id },
@@ -131,13 +131,71 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       include: { responder: true, incident: true }
     });
 
-    // Synchronize Responder & Incident status based on mission progression
-    if (status === 'EN_ROUTE') {
+    const io = req.app.get('io');
+
+    // Handle State Transitions
+    if (upperStatus === 'ACKNOWLEDGED' || upperStatus === 'ACCEPTED') {
+      // Respondent ACCEPTED dispatch
       await prisma.responder.update({
         where: { id: assignment.responderId },
         data: { status: 'EN_ROUTE', lastStatusUpdate: new Date() }
       });
-    } else if (status === 'ON_SCENE') {
+      await prisma.incident.update({
+        where: { id: assignment.incidentId },
+        data: { status: 'DISPATCHED' }
+      });
+
+      if (io) {
+        wsBroadcaster.notifyResponderAction(io, {
+          type: 'ACCEPTED',
+          responderName: assignment.responder.name,
+          callsign: assignment.responder.callsign,
+          incidentNumber: assignment.incident.incidentNumber,
+          incidentId: assignment.incidentId,
+          notes: 'Respondent accepted assignment and is mobilizing.'
+        });
+      }
+
+    } else if (upperStatus === 'DECLINED') {
+      // Respondent DECLINED dispatch
+      await prisma.responder.update({
+        where: { id: assignment.responderId },
+        data: { status: 'AVAILABLE', currentIncidentId: null, lastStatusUpdate: new Date() }
+      });
+      await prisma.incident.update({
+        where: { id: assignment.incidentId },
+        data: { status: 'TRIAGED' } // Returns to triaged pool for re-dispatch
+      });
+
+      if (io) {
+        wsBroadcaster.notifyResponderAction(io, {
+          type: 'DECLINED',
+          responderName: assignment.responder.name,
+          callsign: assignment.responder.callsign,
+          incidentNumber: assignment.incident.incidentNumber,
+          incidentId: assignment.incidentId,
+          notes: declineReason || notes || 'Respondent unavailable or scene hazards outside unit capability.'
+        });
+      }
+
+    } else if (upperStatus === 'EN_ROUTE') {
+      await prisma.responder.update({
+        where: { id: assignment.responderId },
+        data: { status: 'EN_ROUTE', lastStatusUpdate: new Date() }
+      });
+
+      if (io) {
+        wsBroadcaster.notifyResponderAction(io, {
+          type: 'EN_ROUTE',
+          responderName: assignment.responder.name,
+          callsign: assignment.responder.callsign,
+          incidentNumber: assignment.incident.incidentNumber,
+          incidentId: assignment.incidentId,
+          notes: 'Unit en route with sirens & GPS telemetry engaged.'
+        });
+      }
+
+    } else if (upperStatus === 'ON_SCENE') {
       await prisma.responder.update({
         where: { id: assignment.responderId },
         data: { status: 'ON_SCENE', lastStatusUpdate: new Date() }
@@ -146,7 +204,19 @@ router.patch('/:id/status', authenticate, async (req, res) => {
         where: { id: assignment.incidentId },
         data: { status: 'ON_SCENE' }
       });
-    } else if (status === 'COMPLETED') {
+
+      if (io) {
+        wsBroadcaster.notifyResponderAction(io, {
+          type: 'ON_SCENE',
+          responderName: assignment.responder.name,
+          callsign: assignment.responder.callsign,
+          incidentNumber: assignment.incident.incidentNumber,
+          incidentId: assignment.incidentId,
+          notes: 'Unit arrived on scene. Establishing triage perimeter.'
+        });
+      }
+
+    } else if (upperStatus === 'COMPLETED') {
       await prisma.responder.update({
         where: { id: assignment.responderId },
         data: { status: 'AVAILABLE', currentIncidentId: null, lastStatusUpdate: new Date() }
@@ -159,19 +229,33 @@ router.patch('/:id/status', authenticate, async (req, res) => {
           locationSharingActive: false
         }
       });
+
+      if (io) {
+        wsBroadcaster.notifyResponderAction(io, {
+          type: 'COMPLETED',
+          responderName: assignment.responder.name,
+          callsign: assignment.responder.callsign,
+          incidentNumber: assignment.incident.incidentNumber,
+          incidentId: assignment.incidentId,
+          notes: 'Operation successfully completed. Scene secured and unit returning to available pool.'
+        });
+      }
     }
 
-    const io = req.app.get('io');
+    // Broadcast assignment state update to coordinator & civilian rooms
     if (io) {
       io.to('coordinators').emit('assignment:updated', updatedAssignment);
       io.to(`incident:${assignment.incidentId}`).emit('incident:status', {
         status: updatedAssignment.status,
-        incidentStatus: updatedAssignment.status === 'COMPLETED' ? 'RESOLVED' : updatedAssignment.status
+        incidentStatus: updatedAssignment.status === 'COMPLETED' ? 'RESOLVED' : updatedAssignment.status,
+        responderName: assignment.responder.name,
+        responderCallsign: assignment.responder.callsign
       });
     }
 
     res.json({ message: 'Assignment state updated.', assignment: updatedAssignment });
   } catch (err) {
+    console.error('Error updating assignment state:', err);
     res.status(500).json({ error: 'Failed to update assignment state.' });
   }
 });

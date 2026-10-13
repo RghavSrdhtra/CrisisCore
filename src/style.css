@@ -2461,4 +2461,515 @@ input:checked + .slider:before {
 .text-purple { color: #a855f7; }
 .text-green { color: var(--green); }
 
+/* ══════════════════════════════════════════════════════════════════════
+   WEEK 3: DISPATCHER PROMPTS & DUAL-CHANNEL REAL-TIME CHAT STYLES
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Dispatcher Real-Time Prompt Toasts Container */
+.dispatcher-prompts-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 14px 0;
+  width: 100%;
+}
+
+.dispatcher-prompt-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: slidePromptIn 0.25s ease-out;
+  backdrop-filter: blur(12px);
+}
+
+@keyframes slidePromptIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dispatcher-prompt-toast.toast-accepted {
+  border-left: 4px solid var(--green);
+}
+
+.dispatcher-prompt-toast.toast-declined {
+  border-left: 4px solid var(--red);
+  background: rgba(229, 83, 75, 0.12);
+}
+
+.dispatcher-prompt-toast.toast-enroute {
+  border-left: 4px solid var(--amber);
+}
+
+.dispatcher-prompt-toast.toast-onscene {
+  border-left: 4px solid var(--cyan);
+}
+
+.dispatcher-prompt-toast.toast-completed {
+  border-left: 4px solid var(--green);
+}
+
+.prompt-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prompt-toast-content i {
+  font-size: 20px;
+}
+
+.prompt-toast-content strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.prompt-toast-content span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+
+.prompt-toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  transition: color var(--transition-fast);
+}
+
+.prompt-toast-close:hover {
+  color: var(--text-main);
+}
+
+/* Button to Register Unit */
+.btn-reg-unit {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(87, 171, 90, 0.15);
+  border: 1px solid rgba(87, 171, 90, 0.4);
+  color: #57ab5a;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.btn-reg-unit:hover {
+  background: rgba(87, 171, 90, 0.25);
+  border-color: #57ab5a;
+  color: #85e89d;
+}
+
+/* Incident Card Dispatch Controls */
+.incident-dispatch-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.select-responder {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  outline: none;
+}
+
+.btn-dispatch-unit {
+  background: rgba(83, 155, 245, 0.2);
+  border: 1px solid var(--blue);
+  color: #79b8ff;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.btn-dispatch-unit:hover {
+  background: rgba(83, 155, 245, 0.35);
+}
+
+.btn-open-ops-chat {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.btn-open-ops-chat:hover {
+  background: rgba(168, 85, 247, 0.3);
+}
+
+/* Responder Terminal Decision Card */
+.assignment-decision-card {
+  background: rgba(229, 83, 75, 0.08);
+  border: 1px solid rgba(229, 83, 75, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.decision-headline {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.decision-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-accept-dispatch {
+  flex: 1;
+  padding: 8px 12px;
+  background: #238636;
+  border: 1px solid #2ea043;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background var(--transition-fast);
+}
+
+.btn-accept-dispatch:hover {
+  background: #2ea043;
+}
+
+.btn-decline-dispatch {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(229, 83, 75, 0.15);
+  border: 1px solid rgba(229, 83, 75, 0.4);
+  color: #ff7b72;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-decline-dispatch:hover {
+  background: rgba(229, 83, 75, 0.3);
+}
+
+/* Real-Time Chat Panels & Streams */
+.responder-chat-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  height: 380px;
+}
+
+.chat-header-tabs {
+  display: flex;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-tab-btn {
+  flex: 1;
+  padding: 10px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.chat-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.chat-tab-btn.active {
+  color: var(--cyan);
+  background: var(--bg-card);
+  font-weight: 600;
+  border-bottom: 2px solid var(--cyan);
+}
+
+.chat-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  position: absolute;
+  top: 8px;
+  right: 12px;
+}
+
+.chat-stream {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-stream.modal-stream {
+  height: 320px;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  animation: fadeInMsg 0.15s ease-out;
+}
+
+@keyframes fadeInMsg {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-msg.self {
+  align-self: flex-end;
+}
+
+.chat-msg.other {
+  align-self: flex-start;
+}
+
+.chat-sender {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-msg.self .chat-sender {
+  justify-content: flex-end;
+  color: #79b8ff;
+}
+
+.chat-bubble {
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-msg.self .chat-bubble {
+  background: #1f6feb;
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+
+.chat-msg.other .chat-bubble {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-bottom-left-radius: 2px;
+}
+
+.chat-time {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 3px;
+  align-self: flex-end;
+}
+
+.chat-msg.other .chat-time {
+  color: var(--text-dim);
+}
+
+.chat-input-form {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-input:focus {
+  border-color: var(--blue);
+}
+
+.chat-send-btn {
+  background: var(--blue);
+  border: none;
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.chat-send-btn:hover {
+  opacity: 0.9;
+}
+
+/* Tactical Chat Modal Specifics */
+.tactical-chat-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Civilian Portal Direct Chat Card */
+.civilian-responder-chat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.chat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chat-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header-meta i {
+  font-size: 18px;
+}
+
+.chat-header-meta strong {
+  display: block;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.chat-header-meta span {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.chat-stream.civ-stream {
+  height: 180px;
+}
+
+.chat-empty-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 24px 10px;
+}
+
+.quick-chat-chips {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+.quick-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.quick-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+}
+
+.text-purple { color: #a855f7; }
+.text-green { color: var(--green); }
+
 
