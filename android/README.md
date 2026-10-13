@@ -57,18 +57,19 @@ Declared in [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml):
 Inside the Android Emulator (AVD), the virtual device uses `10.0.2.2` as the loopback alias to reach the host development machine:
 
 - **Emulator Host**: Automatically maps to `http://10.0.2.2:3001` via dynamic environment detection in `src/apiConfig.js`.
-- **Physical Device**: Set the host PC's local network IP (e.g. `http://192.168.1.50:3001`) via client configuration or `localStorage.setItem('crisiscore_api_url', 'http://<LAN_IP>:3001')`.
-- **Production**: Configured to point directly to the deployed cloud gateway URL.
+- **Physical Device (Local Network)**: Set the host PC's local network IP (e.g. `http://192.168.1.50:3001`) via client configuration or `localStorage.setItem('crisiscore_api_url', 'http://<LAN_IP>:3001')`.
+- **Production Cloud**: Points directly to the deployed production HTTPS/WSS gateway domain.
 
 ---
 
-## 4. Build & Development Guide
+## 4. System Requirements & Build Guide
 
 ### Prerequisites
-- [Android Studio Iguana+](https://developer.android.com/studio) (2023.2.1 or newer)
-- Android SDK (API Level 34 recommended)
-- Java Development Kit (JDK 17 or newer)
-- Node.js 18+
+- **Minimum Android SDK**: API Level 24 (Android 7.0 Nougat)
+- **Target Android SDK**: API Level 34 (Android 14)
+- **Java Development Kit**: JDK 17 or newer
+- **Android Studio**: Iguana+ (2023.2.1+) or newer
+- **Node.js**: 18+ (LTS)
 
 ### Step 1: Synchronize Web Assets
 Before building native binaries, compile the web assets and sync them to Android:
@@ -113,9 +114,36 @@ The Android Studio Emulator includes an **Extended Controls** location mock inje
 
 ---
 
-## 6. Push Notification Architecture (Optional Extension)
+## 6. Cloud Hosting & Distribution Pipeline
 
-For background wake alerts when the device screen is off, the package (`org.crisiscore.app`) supports **Firebase Cloud Messaging (FCM)**:
-1. Register `org.crisiscore.app` in the [Firebase Console](https://console.firebase.google.com/).
-2. Place the generated `google-services.json` in `android/app/`.
-3. The build configuration automatically binds the Google Services Gradle plugin for background push dispatch.
+When promoting the mobile subsystem from local development to cloud staging or production distribution, follow these deployment steps:
+
+### 1. Point to Production Gateway
+Configure the production backend URL before packaging the build:
+- Set your production domain in `src/apiConfig.js` or via environment variables (e.g., `https://api.crisiscore.org`).
+- Re-sync assets:
+  ```bash
+  npm run android:sync
+  ```
+
+### 2. Generate Release Keystore & Signed Artifacts
+Generate an Android signing key and build an optimized Android App Bundle (AAB) or release APK:
+```bash
+# Generate release keystore (one-time setup):
+keytool -genkey -v -keystore release-key.jks -alias crisiscore -keyalg RSA -keysize 2048 -validity 10000
+
+# Build release bundle:
+cd android
+./gradlew bundleRelease
+```
+Output artifact: `android/app/build/outputs/bundle/release/app-release.aab`
+
+### 3. Distribution Channels
+
+Depending on the deployment strategy, distribute the release package through one of the following hosting workflows:
+
+| Hosting / Distribution Service | Use Case | General Deployment Steps |
+|---|---|---|
+| **Cloud App Distribution** *(e.g., Firebase App Distribution, App Center)* | Internal testing, field exercises, and volunteer pilot cohorts. | 1. Register the application ID (`org.crisiscore.app`) in the cloud console.<br/>2. Upload the compiled `.apk` / `.aab` manually or via CI/CD (`fastlane` / GitHub Actions).<br/>3. Invite emergency responder test groups via email for over-the-air installation. |
+| **Google Play Console** *(Internal / Production Tracks)* | Public civilian distribution and verified responder fleet rollout. | 1. Create app listing in Google Play Console under `org.crisiscore.app`.<br/>2. Upload the signed `app-release.aab` bundle to the Internal Testing or Production track.<br/>3. Complete the Location Permission Declaration (explaining emergency rescue tracking justification).<br/>4. Submit for review and publish. |
+| **Enterprise MDM / Direct APK Hosting** *(Self-hosted / AWS S3 / Cloudflare R2)* | Private agency deployment without third-party app store dependencies. | 1. Build signed APK (`./gradlew assembleRelease`).<br/>2. Upload to secure object storage or internal agency portal.<br/>3. Responders install via direct download or enterprise Mobile Device Management (MDM) profile. |
