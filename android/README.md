@@ -1,83 +1,121 @@
-# CrisisCore — Android Application & Cross-Platform Sync
+# CrisisCore — Android Mobile Subsystem
 
-This directory contains the dedicated native Android application for **CrisisCore**, configured to run across smartphones and tablets for **Field Responders** and **Civilian Requesters**.
+[![Platform](https://img.shields.io/badge/Platform-Android_14_%2B-3DDC84?style=flat-square&logo=android)](https://developer.android.com/)
+[![Runtime](https://img.shields.io/badge/Runtime-Capacitor_7-119EFF?style=flat-square&logo=capacitor)](https://capacitorjs.com/)
+[![Package](https://img.shields.io/badge/Package-org.crisiscore.app-blue?style=flat-square)](android/app/build.gradle)
+
+The `android/` directory contains the production Android client for **CrisisCore**, packaged using Capacitor. It provides dedicated mobile experiences for **Field Responders** (Tactical Terminal) and **Civilian Requesters** (Emergency SOS Portal) with native hardware integrations.
 
 ---
 
-## 1. Cross-Platform Real-Time Synchronization
+## 1. System Architecture
+
+The Android application operates as a native shell around the CrisisCore responsive client, connecting to the central Node.js / Socket.IO dispatch gateway:
 
 ```
 ┌─────────────────────────────────┐           ┌─────────────────────────────────┐
-│        Android Application      │           │      Desktop Web Dashboard      │
-│  (Responder / Civilian Mobile)  │           │   (Coordinator Command Center)  │
+│        Android Application      │           │      Desktop Command Center     │
+│    (Field Responder / Civilian) │           │    (Coordinator / Dispatcher)   │
 └────────────────┬────────────────┘           └────────────────┬────────────────┘
                  │                                             │
                  │ WebSocket (Socket.IO)                       │ WebSocket (Socket.IO)
-                 │ REST API (HTTPS)                            │ REST API (HTTPS)
+                 │ REST API (HTTP/JSON)                        │ REST API (HTTP/JSON)
                  ▼                                             ▼
         ┌──────────────────────────────────────────────────────────────┐
-        │            Central CrisisCore Backend Gateway                │
+        │            Central CrisisCore Dispatch Gateway               │
         │             Node.js + Express + Socket.IO                    │
         └──────────────────────────────┬───────────────────────────────┘
                                        │
                                        ▼
-                           Central SQLite / PostgreSQL
+                          Central Database (SQLite / Postgres)
 ```
 
-### How Synchronization Works (Zero Setup Required Right Now):
-1. **Single Source of Truth**: Both the Android app and the Desktop web portal connect to the centralized backend server (`http://<SERVER_IP>:3001`).
-2. **Instant WebSocket Push**:
-   - When a civilian submits an SOS from an Android phone, the `incident:new` event triggers on the Coordinator's desktop in `<50ms`.
-   - When a coordinator clicks **Dispatch**, the Android phone running the Responder terminal immediately sounds an alarm and displays the incoming mission banner with **Accept** or **Decline**.
-   - When a respondent accepts, the coordinator's monitor displays the real-time prompt toast: *"Carlos Vance ACCEPTED dispatch"*.
-3. **Dual-Channel Live Chat**:
-   - **Tactical Ops**: Coordinator on desktop chats with field unit on Android.
-   - **Civilian Line**: Field respondent on Android chats directly with the civilian.
+### Key Capabilities
+- **Real-Time Dispatch Synchronization**: Instant bidirectional event streaming (`incident:new`, `assignment:new`, `assignment:responder_action`) with sub-50ms latency.
+- **Dual-Channel In-App Comms**: Scoped Socket.IO channels for closed tactical coordinator-responder orders (`OPS`) and direct civilian-responder guidance (`CIVILIAN`).
+- **Hardware GPS Telemetry**: Real-time position tracking (`navigator.geolocation.watchPosition`) streamed to dispatch during active rescue missions, with automated cessation upon resolution.
+- **Interactive Offline Fallback**: Draggable Leaflet pin-drop fallback when satellite signals are obstructed or indoors.
 
 ---
 
-## 2. When Do You Need Firebase?
+## 2. Hardware Permissions & Security
 
-### Right Now: **NO Firebase is needed!**
-- All live chat, telemetry streaming, dispatch alerts, and status prompts run in real-time over **Socket.IO** while the app is active or in the foreground.
+Declared in [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml):
 
-### When You DO Need Firebase:
-You only need to step in and add Firebase when you want **Background Push Notifications (Firebase Cloud Messaging - FCM)**:
-- Specifically, when the phone is locked, screen is off in a responder's pocket, and the app is sleeping or terminated, but a critical emergency alert needs to wake the screen up with a loud alarm tone.
-
-### Steps to Add Firebase (When you are ready):
-1. Go to the [Firebase Console](https://console.firebase.google.com/).
-2. Create a project named `CrisisCore`.
-3. Click **Add App** -> **Android**.
-4. Set Android package name to: **`org.crisiscore.app`**.
-5. Download **`google-services.json`**.
-6. Place `google-services.json` inside this directory:
-   ```
-   android/app/google-services.json
-   ```
-7. That's it! The build script will automatically detect the Google services configuration.
+| Permission | Purpose |
+|---|---|
+| `android.permission.INTERNET` | Communication with central dispatch gateway and map tile servers. |
+| `android.permission.ACCESS_FINE_LOCATION` | High-precision GPS tracking for emergency victim location and responder routing. |
+| `android.permission.ACCESS_COARSE_LOCATION` | Cellular/Wi-Fi triangulation fallback for indoor or low-signal scenarios. |
+| `android.hardware.location.gps` | GPS hardware detection (optional requirement to support diverse hardware). |
+| `android:usesCleartextTraffic="true"` | Permits local unencrypted HTTP/WS development on Android 9+ (API 28+). |
 
 ---
 
-## 3. Developer Workflow
+## 3. Network Configuration & Host Routing
 
-### Sync Web Updates to Android:
-Whenever you update code in the frontend, run:
+Inside the Android Emulator (AVD), the virtual device uses `10.0.2.2` as the loopback alias to reach the host development machine:
+
+- **Emulator Host**: Automatically maps to `http://10.0.2.2:3001` via dynamic environment detection in `src/apiConfig.js`.
+- **Physical Device**: Set the host PC's local network IP (e.g. `http://192.168.1.50:3001`) via client configuration or `localStorage.setItem('crisiscore_api_url', 'http://<LAN_IP>:3001')`.
+- **Production**: Configured to point directly to the deployed cloud gateway URL.
+
+---
+
+## 4. Build & Development Guide
+
+### Prerequisites
+- [Android Studio Iguana+](https://developer.android.com/studio) (2023.2.1 or newer)
+- Android SDK (API Level 34 recommended)
+- Java Development Kit (JDK 17 or newer)
+- Node.js 18+
+
+### Step 1: Synchronize Web Assets
+Before building native binaries, compile the web assets and sync them to Android:
 ```bash
+# From project root:
 npm run android:sync
 ```
-*(Builds the Vite production bundle and updates `android/app/src/main/assets/public`)*
+*This executes `vite build` and copies production bundles into `android/app/src/main/assets/public`.*
 
-### Open in Android Studio:
+### Step 2: Open in Android Studio
 ```bash
+# From project root:
 npm run android:open
 ```
-*(Opens the Gradle project in Android Studio for emulator testing, USB device debugging, or APK generation)*
+*Alternatively, launch Android Studio and select the `android/` directory.*
 
-### Generate Debug APK:
+### Step 3: Run on Emulator or Physical Device
+1. Wait for Gradle sync to complete.
+2. Select target device in the device manager dropdown.
+3. Click **▶ Run ('app')** (`Shift + F10`).
+
+### Step 4: Building Standalone Debug APK
 ```bash
 cd android
 ./gradlew assembleDebug
 ```
-The compiled APK will be created at:
-`android/app/build/outputs/apk/debug/app-debug.apk`
+The compiled package will be generated at:
+```
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## 5. Testing GPS Telemetry in Emulator
+
+The Android Studio Emulator includes an **Extended Controls** location mock injector:
+1. Start the Android Emulator.
+2. Click the **`...` (Extended Controls)** button on the emulator side toolbar.
+3. Navigate to the **Location** tab.
+4. Input latitude and longitude (e.g. `28.6139, 77.2090` for New Delhi) and click **Send Location**.
+5. The CrisisCore mobile app detects the coordinate update immediately and plots the position on the tactical rescue map.
+
+---
+
+## 6. Push Notification Architecture (Optional Extension)
+
+For background wake alerts when the device screen is off, the package (`org.crisiscore.app`) supports **Firebase Cloud Messaging (FCM)**:
+1. Register `org.crisiscore.app` in the [Firebase Console](https://console.firebase.google.com/).
+2. Place the generated `google-services.json` in `android/app/`.
+3. The build configuration automatically binds the Google Services Gradle plugin for background push dispatch.
