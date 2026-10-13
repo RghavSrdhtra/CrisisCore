@@ -10,12 +10,17 @@
     "server": "npm --prefix server start",
     "server:dev": "npm --prefix server run dev",
     "server:seed": "npm --prefix server run prisma:seed",
-    "server:push": "npm --prefix server run prisma:push"
+    "server:push": "npm --prefix server run prisma:push",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "devDependencies": {
     "vite": "^8.0.10"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "socket.io-client": "^4.8.4"
   }
 }

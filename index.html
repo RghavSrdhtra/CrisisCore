@@ -41,6 +41,7 @@
         <a href="#" class="nav-item"><i class="ph ph-ambulance"></i> Fleet</a>
         <a href="#" class="nav-item"><i class="ph ph-chart-line-up"></i> Analytics</a>
         <a href="#" class="nav-item"><i class="ph ph-gear"></i> Settings</a>
+        <button type="button" class="nav-item btn-sidebar-logout" id="sidebarLogoutBtn" style="color: #ff7b72; margin-top: auto; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px;"><i class="ph ph-sign-out"></i> Log Out</button>
       </nav>
       
       <div class="system-health">
@@ -69,6 +70,7 @@
         <div class="topbar-actions">
           <a href="/sos.html" target="_blank" class="btn-icon" title="Open Civilian Emergency SOS Portal in new window" style="text-decoration: none; color: #ff7b72;"><i class="ph-fill ph-phone-call"></i></a>
           <button class="btn-icon" id="quickAuthBtn" title="Switch Account / Login"><i class="ph ph-user-switch"></i></button>
+          <button class="btn-icon" id="topbarLogoutBtn" title="Log Out / Exit Session" style="color: #ff7b72;"><i class="ph ph-sign-out"></i></button>
           
           <!-- User Profile & Dropdown -->
           <div class="profile-container">
@@ -196,6 +198,32 @@
             <div class="resource-list" id="resourceList">
               <!-- Injected via JS -->
             </div>
+          </section>
+
+          <!-- Persistent Tactical Ops Comms Line (Coordinator <-> Field Units) -->
+          <section class="glass-panel coordinator-comms-dock" id="coordinatorCommsDock">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-chat-teardrop-dots neon-icon"></i> Tactical Ops Comms</h2>
+              <span class="badge badge-primary" id="commsActiveUnitBadge">Standby</span>
+            </div>
+            <div class="comms-dock-subhead">
+              <select id="commsIncidentSelect" class="comms-incident-select">
+                <option value="">Select Dispatched Incident / Unit...</option>
+              </select>
+            </div>
+            <div class="chat-stream comms-dock-stream" id="coordinatorDirectChatStream">
+              <div class="chat-empty-hint">Select a dispatched incident above to chat directly with the assigned field respondent.</div>
+            </div>
+            <div class="quick-chat-chips" id="coordinatorQuickChips">
+              <button type="button" class="quick-chip" data-msg="Confirm your current ETA to scene.">Confirm ETA</button>
+              <button type="button" class="quick-chip" data-msg="Proceed with ALS stabilization.">ALS Protocol</button>
+              <button type="button" class="quick-chip" data-msg="Hold perimeter; backup en route.">Hold Perimeter</button>
+              <button type="button" class="quick-chip" data-msg="Request acknowledged.">Ack</button>
+            </div>
+            <form id="coordinatorDirectChatForm" class="chat-input-form">
+              <input type="text" id="coordinatorDirectChatInput" class="chat-input" placeholder="Transmit tactical order to unit..." autocomplete="off" />
+              <button type="submit" class="chat-send-btn" id="coordinatorDirectChatSendBtn"><i class="ph-fill ph-paper-plane-right"></i></button>
+            </form>
           </section>
 
         </div>
@@ -368,6 +396,26 @@
             </div>
           </section>
 
+          <!-- Direct Civilian <-> Arriving Responder Live Chat -->
+          <section class="glass-panel civilian-chat-dock" id="civilianViewChatDock">
+            <div class="panel-header">
+              <h2><i class="ph-fill ph-chat-circle-dots text-green"></i> Direct Responder Line</h2>
+              <span class="badge badge-success" id="civViewLiveBadge">LIVE</span>
+            </div>
+            <div class="chat-stream civ-stream" id="civilianViewChatStream">
+              <div class="chat-empty-hint">Direct channel with arriving personnel. State gate code or immediate hazards.</div>
+            </div>
+            <div class="quick-chat-chips" id="civilianViewQuickChips">
+              <button type="button" class="quick-chip" data-msg="We are waiting at the front entrance gate.">At front gate</button>
+              <button type="button" class="quick-chip" data-msg="Patient is conscious and breathing.">Patient conscious</button>
+              <button type="button" class="quick-chip" data-msg="Exit is blocked by debris/smoke.">Exit blocked</button>
+            </div>
+            <form id="civilianViewChatForm" class="chat-input-form">
+              <input type="text" id="civilianViewChatInput" class="chat-input" placeholder="Message arriving rescue unit..." autocomplete="off" />
+              <button type="submit" class="chat-send-btn" id="civilianViewChatSendBtn"><i class="ph-fill ph-paper-plane-right"></i></button>
+            </form>
+          </section>
+
           <!-- Citizen Safety Advice -->
           <section class="glass-panel">
             <div class="panel-header">
@@ -423,93 +471,254 @@
     </div>
   </div>
 
-  <!-- Simple Login Modal -->
-  <div class="auth-modal-backdrop" id="authModal" style="display: none;">
-    <div class="auth-modal">
-      <div class="auth-modal-header">
-        <div class="auth-modal-title">
-          <i class="ph-fill ph-shield-check"></i>
+  <!-- CrisisCore Authentication Gate (Sign In / Register with Mandatory Respondent ToS) -->
+  <div class="auth-gate-backdrop" id="authGateScreen" style="display: none;">
+    <div class="auth-gate-card">
+      <div class="auth-gate-header">
+        <div class="auth-brand">
+          <i class="ph-fill ph-shield-warning neon-icon"></i>
           <div>
-            <h3>CrisisCore Login</h3>
-            <p>Sign in to your account</p>
+            <h2>CrisisCore</h2>
+            <span>Emergency Tactical Coordination Grid</span>
           </div>
         </div>
-        <button class="close-modal-btn" id="closeAuthModalBtn"><i class="ph ph-x"></i></button>
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab-btn active" id="tabAuthSignIn">Sign In</button>
+          <button type="button" class="auth-tab-btn" id="tabAuthRegister">Register New User</button>
+        </div>
       </div>
 
-      <div class="auth-modal-body">
-        <!-- Standard Login Form -->
-        <form id="authLoginForm" class="auth-form">
-          <div class="form-group">
-            <label>Email Address</label>
-            <div class="input-wrap">
-              <i class="ph ph-envelope-simple"></i>
-              <input type="email" id="loginEmail" placeholder="admin@test.com" required value="admin@test.com" />
+      <div class="auth-gate-body">
+        <!-- Tab 1: Sign In -->
+        <div id="authSignInPane" class="auth-pane active">
+          <form id="authLoginForm" class="auth-form">
+            <div class="form-group">
+              <label>Email Address</label>
+              <div class="input-wrap">
+                <i class="ph ph-envelope-simple"></i>
+                <input type="email" id="loginEmail" placeholder="admin@test.com" required value="admin@test.com" />
+              </div>
             </div>
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <div class="input-wrap">
-              <i class="ph ph-lock-key"></i>
-              <input type="password" id="loginPassword" placeholder="Enter password" required value="password123" />
+            <div class="form-group">
+              <label>Password</label>
+              <div class="input-wrap">
+                <i class="ph ph-lock-key"></i>
+                <input type="password" id="loginPassword" placeholder="Enter password" required value="password123" />
+              </div>
             </div>
-          </div>
-          <div id="authAlert" class="auth-alert" style="display: none;"></div>
-          <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">
-            <span>Sign In</span>
-            <i class="ph ph-arrow-right"></i>
-          </button>
-        </form>
+            <div id="authAlert" class="auth-alert" style="display: none;"></div>
+            <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">
+              <span>Sign In to Terminal</span>
+              <i class="ph ph-arrow-right"></i>
+            </button>
+          </form>
 
-        <div class="auth-divider">
-          <span>OR SWITCH DEMO ACCOUNT</span>
+          <div class="auth-divider">
+            <span>OR 1-CLICK TEST PROFILE SIGN-IN</span>
+          </div>
+
+          <div class="quick-role-cards">
+            <div class="role-card" data-role="ADMIN" data-email="admin@test.com">
+              <div class="role-icon-box admin-box"><i class="ph-fill ph-shield-star"></i></div>
+              <div class="role-card-info">
+                <div class="role-card-top">
+                  <span class="name">Marcus Wright</span>
+                  <span class="user-role-badge badge-admin">Admin</span>
+                </div>
+                <span class="desc">System Governance • Fleet Control</span>
+              </div>
+            </div>
+
+            <div class="role-card" data-role="COORDINATOR" data-email="coordinator@test.com">
+              <div class="role-icon-box coordinator-box"><i class="ph-fill ph-crosshair"></i></div>
+              <div class="role-card-info">
+                <div class="role-card-top">
+                  <span class="name">Sarah Connor</span>
+                  <span class="user-role-badge badge-coordinator">Coordinator</span>
+                </div>
+                <span class="desc">Central Dispatcher • Live Incident Queue</span>
+              </div>
+            </div>
+
+            <div class="role-card" data-role="RESPONDER" data-email="responder@test.com">
+              <div class="role-icon-box responder-box"><i class="ph-fill ph-ambulance"></i></div>
+              <div class="role-card-info">
+                <div class="role-card-top">
+                  <span class="name">Capt. Carlos Vance</span>
+                  <span class="user-role-badge badge-responder">Responder</span>
+                </div>
+                <span class="desc">Unit MEDIC-01 • Dispatch & Telemetry</span>
+              </div>
+            </div>
+
+            <div class="role-card" data-role="CIVILIAN" data-email="civilian@test.com">
+              <div class="role-icon-box civilian-box"><i class="ph-fill ph-user"></i></div>
+              <div class="role-card-info">
+                <div class="role-card-top">
+                  <span class="name">Jane Doe</span>
+                  <span class="user-role-badge badge-civilian">Civilian</span>
+                </div>
+                <span class="desc">Citizen SOS Portal • Emergency Request</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Quick Demo Accounts -->
-        <div class="quick-role-cards">
-          <div class="role-card" data-role="ADMIN" data-email="admin@test.com">
-            <div class="role-icon-box admin-box"><i class="ph-fill ph-shield-star"></i></div>
-            <div class="role-card-info">
-              <div class="role-card-top">
-                <span class="name">Marcus Wright</span>
-                <span class="user-role-badge badge-admin">Admin</span>
+        <!-- Tab 2: Register -->
+        <div id="authRegisterPane" class="auth-pane" style="display: none;">
+          <div class="reg-role-toggle">
+            <button type="button" class="reg-role-btn active" id="btnRegCivilian">
+              <i class="ph-fill ph-user"></i>
+              <div>
+                <strong>Civilian Requester</strong>
+                <small>Request assistance & track rescuers</small>
               </div>
-              <span class="desc">System Administrator • Fleet & Operations Governance</span>
-            </div>
+            </button>
+            <button type="button" class="reg-role-btn" id="btnRegResponder">
+              <i class="ph-fill ph-ambulance"></i>
+              <div>
+                <strong>Emergency First Respondent</strong>
+                <small>Accept dispatches & field missions</small>
+              </div>
+            </button>
           </div>
 
-          <div class="role-card" data-role="COORDINATOR" data-email="coordinator@test.com">
-            <div class="role-icon-box coordinator-box"><i class="ph-fill ph-crosshair"></i></div>
-            <div class="role-card-info">
-              <div class="role-card-top">
-                <span class="name">Sarah Connor</span>
-                <span class="user-role-badge badge-coordinator">Coordinator</span>
+          <!-- Civilian Registration Form -->
+          <form id="regCivilianForm" class="auth-form reg-subform">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Full Name</label>
+                <div class="input-wrap">
+                  <i class="ph ph-user"></i>
+                  <input type="text" id="regCivName" placeholder="e.g. Rahul Sharma" required />
+                </div>
               </div>
-              <span class="desc">Emergency Dispatcher • Tactical Incident Coordination</span>
+              <div class="form-group flex-1">
+                <label>Phone Number</label>
+                <div class="input-wrap">
+                  <i class="ph ph-phone"></i>
+                  <input type="tel" id="regCivPhone" placeholder="+91-9876543210" required />
+                </div>
+              </div>
             </div>
-          </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Email Address</label>
+                <div class="input-wrap">
+                  <i class="ph ph-envelope"></i>
+                  <input type="email" id="regCivEmail" placeholder="rahul@example.com" required />
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label>Password</label>
+                <div class="input-wrap">
+                  <i class="ph ph-lock"></i>
+                  <input type="password" id="regCivPassword" placeholder="Create password" required />
+                </div>
+              </div>
+            </div>
+            <div id="regCivAlert" class="auth-alert" style="display: none;"></div>
+            <button type="submit" class="auth-submit-btn" id="regCivSubmitBtn">
+              <span>Register as Civilian</span>
+              <i class="ph ph-check-circle"></i>
+            </button>
+          </form>
 
-          <div class="role-card" data-role="RESPONDER" data-email="responder@test.com">
-            <div class="role-icon-box responder-box"><i class="ph-fill ph-ambulance"></i></div>
-            <div class="role-card-info">
-              <div class="role-card-top">
-                <span class="name">Capt. Carlos Vance</span>
-                <span class="user-role-badge badge-responder">Responder</span>
+          <!-- Respondent Registration Form with Mandatory Voluntary ToS -->
+          <form id="regResponderForm" class="auth-form reg-subform" style="display: none;">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Officer / Respondent Name</label>
+                <div class="input-wrap">
+                  <i class="ph ph-user-circle"></i>
+                  <input type="text" id="regRespName" placeholder="e.g. Officer Vikram Singh" required />
+                </div>
               </div>
-              <span class="desc">Field Paramedic Unit MEDIC-01 • Dispatch & Telemetry</span>
+              <div class="form-group flex-1">
+                <label>Unit Callsign</label>
+                <div class="input-wrap">
+                  <i class="ph ph-broadcast"></i>
+                  <input type="text" id="regRespCallsign" placeholder="e.g. RESCUE-03, FIRE-02" required style="text-transform: uppercase;" />
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div class="role-card" data-role="CIVILIAN" data-email="civilian@test.com">
-            <div class="role-icon-box civilian-box"><i class="ph-fill ph-user"></i></div>
-            <div class="role-card-info">
-              <div class="role-card-top">
-                <span class="name">Jane Doe</span>
-                <span class="user-role-badge badge-civilian">Civilian</span>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Agency / Department</label>
+                <div class="input-wrap">
+                  <i class="ph ph-buildings"></i>
+                  <input type="text" id="regRespAgency" placeholder="e.g. Delhi Fire & Rescue Services" required />
+                </div>
               </div>
-              <span class="desc">Citizen SOS Portal • Voluntary Location Reporting</span>
+              <div class="form-group flex-1">
+                <label>Badge Number / ID</label>
+                <div class="input-wrap">
+                  <i class="ph ph-identification-card"></i>
+                  <input type="text" id="regRespBadge" placeholder="e.g. DF-4421" required />
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Vehicle / Unit Type</label>
+                <select id="regRespType" class="input-styled" style="width: 100%;">
+                  <option value="MEDICAL_AMBULANCE">Medical Ambulance (ALS Unit)</option>
+                  <option value="FIRE_ENGINE">Fire Engine / Rescue Truck</option>
+                  <option value="POLICE_PATROL">Police Perimeter Patrol</option>
+                  <option value="SEARCH_RESCUE">Disaster Search & Rescue</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label>Contact Phone</label>
+                <div class="input-wrap">
+                  <i class="ph ph-phone"></i>
+                  <input type="tel" id="regRespPhone" placeholder="+91-9812345678" required />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Email Address</label>
+                <div class="input-wrap">
+                  <i class="ph ph-envelope"></i>
+                  <input type="email" id="regRespEmail" placeholder="vikram@rescue.gov" required />
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label>Password</label>
+                <div class="input-wrap">
+                  <i class="ph ph-lock"></i>
+                  <input type="password" id="regRespPassword" placeholder="Create password" required />
+                </div>
+              </div>
+            </div>
+
+            <!-- Mandatory Voluntary Emergency ToS Box -->
+            <div class="tos-legal-card">
+              <div class="tos-header">
+                <i class="ph-fill ph-warning-octagon text-amber"></i>
+                <strong>VOLUNTARY EMERGENCY DISPATCH CODE OF CONDUCT & LIABILITY AGREEMENT</strong>
+              </div>
+              <div class="tos-body">
+                <p><strong>1. Operational Duty of Care:</strong> By registering as an active Field Respondent on the CrisisCore Tactical Network, you voluntarily agree to receive emergency dispatches. You acknowledge that accepting an emergency dispatch creates a binding operational duty of care to the civilian victim in distress.</p>
+                <p><strong>2. Protocol Adherence:</strong> You agree to provide real-time status updates (En Route, On Scene, Completed) and maintain active GPS telemetry during missions.</p>
+                <p><strong>3. Statutory Abandonment Liability & Penalties:</strong> Intentionally, negligently, or maliciously abandoning an accepted emergency call without prior Central Dispatch authorization constitutes a severe dereliction of duty. Violators are subject to immediate badge revocation, blacklisting from the emergency grid, disciplinary reporting to municipal authorities, and statutory administrative fines of up to ₹25,000 / $500 under Municipal Emergency Services Regulations.</p>
+              </div>
+              <label class="tos-checkbox-label">
+                <input type="checkbox" id="regRespTosCheck" required />
+                <span>I have read, understood, and voluntarily agree to abide by the Emergency Field Respondent Code of Conduct and Statutory Liability Terms.</span>
+              </label>
+            </div>
+
+            <div id="regRespAlert" class="auth-alert" style="display: none;"></div>
+            <button type="submit" class="auth-submit-btn" id="regRespSubmitBtn" disabled>
+              <span>Accept Terms & Register Respondent Unit</span>
+              <i class="ph ph-arrow-right"></i>
+            </button>
+          </form>
         </div>
       </div>
     </div>

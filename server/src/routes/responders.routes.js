@@ -75,6 +75,11 @@ router.post('/register', optionalAuthenticate, async (req, res) => {
       return res.status(400).json({ error: 'A responder unit with this callsign already exists.' });
     }
 
+    const { tosAgreed } = req.body;
+    if (tosAgreed !== true && tosAgreed !== 'true') {
+      return res.status(400).json({ error: 'You must agree to the Emergency Field Responder Voluntary Terms of Service & Operational Code of Conduct.' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
@@ -90,6 +95,23 @@ router.post('/register', optionalAuthenticate, async (req, res) => {
         badgeNumber: badgeNumber || `RESP-${Math.floor(1000 + Math.random() * 9000)}`
       }
     });
+
+    // Record audit log for ToS agreement acceptance
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'RESPONDER_TOS_ACCEPTED',
+        resourceType: 'RESPONDER',
+        resourceId: user.id,
+        details: JSON.stringify({
+          agreement: 'Emergency Field Responder Voluntary Code of Conduct & Operational Liability Agreement',
+          dutyOfCareAcknowledged: true,
+          abandonmentPenaltyClausesAccepted: true,
+          timestamp: new Date().toISOString()
+        }),
+        ipAddress: req.ip || '127.0.0.1'
+      }
+    }).catch(e => console.warn('Audit log write error:', e));
 
     // Create linked Responder unit
     const responder = await prisma.responder.create({

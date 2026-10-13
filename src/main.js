@@ -114,6 +114,20 @@ async function loadBackendData() {
       }
     }
 
+    // 3. Update Coordinator Comms Dock incident options
+    const commsSelect = document.getElementById('commsIncidentSelect');
+    if (commsSelect) {
+      const activeIncs = state.incidents.filter(i => i.status !== 'resolved' && i.status !== 'cancelled');
+      const currVal = commsSelect.value || activeOpsChatIncidentId;
+      commsSelect.innerHTML = '<option value="">-- Select Active Dispatched Incident to Chat --</option>' +
+        activeIncs.map(i => `<option value="${i.dbId || i.id}" ${currVal === (i.dbId || i.id) ? 'selected' : ''}>${i.id}: ${escapeHtml(i.description?.slice(0, 30) || 'Incident')} (${i.status.toUpperCase()})</option>`).join('');
+      if (!activeOpsChatIncidentId && activeIncs.length > 0) {
+        activeOpsChatIncidentId = activeIncs[0].dbId || activeIncs[0].id;
+        commsSelect.value = activeOpsChatIncidentId;
+        loadDirectCoordinatorChat(activeOpsChatIncidentId);
+      }
+    }
+
     updateMetrics();
     renderAll();
   } catch (err) {
@@ -430,9 +444,36 @@ window.openTacticalOpsChat = async (incidentDbId, incidentNum, callsign) => {
     try {
       const res = await fetch(`/api/chat/${incidentDbId}?channel=OPS`);
       const data = await res.json();
-      renderChatStream(stream, data.messages || [], currentUser.name);
+      renderChatStream(stream, data.messages || [], currentUser ? currentUser.name : 'Coordinator');
     } catch (err) {
       stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">No message history.</div>';
+    }
+  }
+};
+
+window.loadDirectCoordinatorChat = async (incidentDbId) => {
+  if (!incidentDbId) return;
+  activeOpsChatIncidentId = incidentDbId;
+  const badge = document.getElementById('commsActiveUnitBadge');
+  const stream = document.getElementById('coordinatorDirectChatStream');
+  const match = state.incidents.find(i => i.dbId === incidentDbId || i.id === incidentDbId);
+
+  if (badge) {
+    badge.textContent = match?.responderCallsign || (match?.id ? match.id : 'ACTIVE');
+  }
+
+  if (socket && socket.connected) {
+    socket.emit('chat:join', { incidentId: incidentDbId, channel: 'OPS' });
+  }
+
+  if (stream) {
+    stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">Connecting to tactical line...</div>';
+    try {
+      const res = await fetch(`/api/chat/${incidentDbId}?channel=OPS`);
+      const data = await res.json();
+      renderChatStream(stream, data.messages || [], currentUser ? currentUser.name : 'Coordinator');
+    } catch (err) {
+      stream.innerHTML = '<div class="chat-empty-hint">Direct tactical line open. Transmit orders below.</div>';
     }
   }
 };
@@ -505,11 +546,28 @@ const DEMO_PROFILES = {
   }
 };
 
-let currentUser = DEMO_PROFILES.ADMIN;
+let currentUser = null;
+try {
+  const savedUser = localStorage.getItem('crisiscore_user');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+  }
+} catch (e) {
+  currentUser = null;
+}
 
 function updateUserUI(user) {
+  if (!user) {
+    showAuthGate();
+    return;
+  }
   currentUser = user;
+  try {
+    localStorage.setItem('crisiscore_user', JSON.stringify(user));
+  } catch (e) {}
+  hideAuthGate();
   
+  const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=06b6d4&color=080a11&bold=true&size=30`;
   const topbarUserName = document.getElementById('topbarUserName');
   const topbarUserRole = document.getElementById('topbarUserRole');
   const topbarAvatar = document.getElementById('topbarAvatar');
@@ -524,15 +582,15 @@ function updateUserUI(user) {
     topbarUserRole.textContent = user.role;
     topbarUserRole.className = `user-role-badge badge-${user.role.toLowerCase()}`;
   }
-  if (topbarAvatar) topbarAvatar.src = user.avatar;
+  if (topbarAvatar) topbarAvatar.src = avatarUrl;
   if (dropdownName) dropdownName.textContent = user.name;
   if (dropdownEmail) dropdownEmail.textContent = user.email;
   if (dropdownRolePill) {
     dropdownRolePill.textContent = user.role;
     dropdownRolePill.className = `role-pill badge-${user.role.toLowerCase()}`;
   }
-  if (dropdownAgency) dropdownAgency.textContent = user.agency;
-  if (dropdownBadge) dropdownBadge.textContent = user.badge;
+  if (dropdownAgency) dropdownAgency.textContent = user.agency || 'Emergency Directorate';
+  if (dropdownBadge) dropdownBadge.textContent = user.badge || user.badgeNumber || 'AUTH';
 
   const roleBanner = document.getElementById('roleBanner');
   const roleBannerText = document.getElementById('roleBannerText');
@@ -1112,8 +1170,93 @@ function setupModals() {
     };
   }
 
-  // 5. Auth Switcher Modal
+  // 5. Coordinator Comms Dock Wiring
+  setupCoordinatorCommsDock();
+
+  // 6. Auth Gate & Session Management
   setupAuthUI();
+}
+
+function showAuthGate() {
+  const gate = document.getElementById('authGateScreen');
+  if (gate) gate.style.display = 'flex';
+  const profileDropdown = document.getElementById('profileDropdown');
+  if (profileDropdown) profileDropdown.style.display = 'none';
+}
+
+function hideAuthGate() {
+  const gate = document.getElementById('authGateScreen');
+  if (gate) gate.style.display = 'none';
+}
+
+function handleLogout() {
+  try {
+    localStorage.removeItem('crisiscore_token');
+    localStorage.removeItem('crisiscore_user');
+  } catch (e) {}
+  currentUser = null;
+  const profileDropdown = document.getElementById('profileDropdown');
+  if (profileDropdown) profileDropdown.style.display = 'none';
+  showAuthGate();
+}
+
+function setupCoordinatorCommsDock() {
+  const commsSelect = document.getElementById('commsIncidentSelect');
+  const form = document.getElementById('coordinatorDirectChatForm');
+  const input = document.getElementById('coordinatorDirectChatInput');
+  const quickChips = document.getElementById('coordinatorQuickChips');
+
+  if (quickChips && input) {
+    quickChips.querySelectorAll('.quick-chip').forEach(chip => {
+      chip.onclick = () => {
+        input.value = chip.getAttribute('data-msg');
+        input.focus();
+      };
+    });
+  }
+
+  if (commsSelect) {
+    commsSelect.onchange = () => {
+      if (commsSelect.value) {
+        loadDirectCoordinatorChat(commsSelect.value);
+      }
+    };
+  }
+
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const text = input?.value.trim();
+      if (!text) return;
+      if (!activeOpsChatIncidentId) {
+        alert('Please select an active incident from the dropdown above to transmit orders.');
+        return;
+      }
+
+      input.value = '';
+
+      if (socket && socket.connected) {
+        socket.emit('chat:send', {
+          incidentId: activeOpsChatIncidentId,
+          channel: 'OPS',
+          message: text,
+          senderName: currentUser ? currentUser.name : 'Coordinator',
+          senderRole: 'COORDINATOR'
+        });
+      } else {
+        await fetch(`/api/chat/${activeOpsChatIncidentId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel: 'OPS',
+            message: text,
+            senderName: currentUser ? currentUser.name : 'Coordinator',
+            senderRole: 'COORDINATOR'
+          })
+        });
+      }
+    };
+  }
 }
 
 function setupAuthUI() {
@@ -1121,19 +1264,257 @@ function setupAuthUI() {
   const quickAuthBtn = document.getElementById('quickAuthBtn');
   const userProfileBtn = document.getElementById('userProfileBtn');
   const profileDropdown = document.getElementById('profileDropdown');
-  const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
-  const authModal = document.getElementById('authModal');
   const bannerSwitchBtn = document.getElementById('bannerSwitchBtn');
   const logoutBtn = document.getElementById('logoutBtn');
+  const topbarLogoutBtn = document.getElementById('topbarLogoutBtn');
+  const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
 
-  const openModal = () => {
-    if (authModal) authModal.style.display = 'flex';
-    if (profileDropdown) profileDropdown.style.display = 'none';
-  };
-  const closeModal = () => {
-    if (authModal) authModal.style.display = 'none';
-  };
+  // Tabs in Auth Gate
+  const tabAuthSignIn = document.getElementById('tabAuthSignIn');
+  const tabAuthRegister = document.getElementById('tabAuthRegister');
+  const authSignInPane = document.getElementById('authSignInPane');
+  const authRegisterPane = document.getElementById('authRegisterPane');
 
+  if (tabAuthSignIn && tabAuthRegister && authSignInPane && authRegisterPane) {
+    tabAuthSignIn.onclick = () => {
+      tabAuthSignIn.classList.add('active');
+      tabAuthRegister.classList.remove('active');
+      authSignInPane.style.display = 'flex';
+      authRegisterPane.style.display = 'none';
+    };
+    tabAuthRegister.onclick = () => {
+      tabAuthRegister.classList.add('active');
+      tabAuthSignIn.classList.remove('active');
+      authRegisterPane.style.display = 'flex';
+      authSignInPane.style.display = 'none';
+    };
+  }
+
+  // Registration Role Selector (Civilian vs Responder)
+  const btnRegCivilian = document.getElementById('btnRegCivilian');
+  const btnRegResponder = document.getElementById('btnRegResponder');
+  const regCivilianForm = document.getElementById('regCivilianForm');
+  const regResponderForm = document.getElementById('regResponderForm');
+
+  if (btnRegCivilian && btnRegResponder && regCivilianForm && regResponderForm) {
+    btnRegCivilian.onclick = () => {
+      btnRegCivilian.classList.add('active');
+      btnRegResponder.classList.remove('active');
+      regCivilianForm.style.display = 'flex';
+      regResponderForm.style.display = 'none';
+    };
+    btnRegResponder.onclick = () => {
+      btnRegResponder.classList.add('active');
+      btnRegCivilian.classList.remove('active');
+      regResponderForm.style.display = 'flex';
+      regCivilianForm.style.display = 'none';
+    };
+  }
+
+  // Respondent ToS Checkbox unlock
+  const regRespTosCheck = document.getElementById('regRespTosCheck');
+  const regRespSubmitBtn = document.getElementById('regRespSubmitBtn');
+  if (regRespTosCheck && regRespSubmitBtn) {
+    regRespTosCheck.onchange = () => {
+      regRespSubmitBtn.disabled = !regRespTosCheck.checked;
+    };
+  }
+
+  // Sign In Form Submission
+  const authLoginForm = document.getElementById('authLoginForm');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const authAlert = document.getElementById('authAlert');
+  const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+
+  if (authLoginForm) {
+    authLoginForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = loginEmail?.value.trim();
+      const password = loginPassword?.value;
+      if (!email || !password) return;
+
+      if (loginSubmitBtn) {
+        loginSubmitBtn.disabled = true;
+        loginSubmitBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Authenticating...';
+      }
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed.');
+
+        if (data.token) {
+          try { localStorage.setItem('crisiscore_token', data.token); } catch(e){}
+        }
+
+        updateUserUI(data.user);
+        hideAuthGate();
+        await loadBackendData();
+      } catch (err) {
+        if (authAlert) {
+          authAlert.style.display = 'block';
+          authAlert.className = 'auth-alert';
+          authAlert.textContent = err.message;
+        }
+      } finally {
+        if (loginSubmitBtn) {
+          loginSubmitBtn.disabled = false;
+          loginSubmitBtn.innerHTML = '<span>Sign In to Terminal</span> <i class="ph ph-arrow-right"></i>';
+        }
+      }
+    };
+  }
+
+  // Civilian Registration Form Submission
+  if (regCivilianForm) {
+    regCivilianForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('regCivName')?.value.trim();
+      const phone = document.getElementById('regCivPhone')?.value.trim();
+      const email = document.getElementById('regCivEmail')?.value.trim();
+      const password = document.getElementById('regCivPassword')?.value;
+      const alertBox = document.getElementById('regCivAlert');
+      const submitBtn = document.getElementById('regCivSubmitBtn');
+
+      if (!name || !email || !password) return;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Registering...';
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone, email, password, role: 'CIVILIAN' })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Registration failed.');
+
+        if (data.token) {
+          try { localStorage.setItem('crisiscore_token', data.token); } catch(e){}
+        }
+
+        updateUserUI(data.user);
+        hideAuthGate();
+      } catch (err) {
+        if (alertBox) {
+          alertBox.style.display = 'block';
+          alertBox.className = 'auth-alert';
+          alertBox.textContent = err.message;
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>Register as Civilian</span> <i class="ph ph-check-circle"></i>';
+        }
+      }
+    };
+  }
+
+  // Respondent Registration Form Submission (With Mandatory ToS Agreement)
+  if (regResponderForm) {
+    regResponderForm.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!regRespTosCheck?.checked) {
+        alert('You must review and accept the Voluntary Emergency Responder Terms of Service & Code of Conduct.');
+        return;
+      }
+
+      const name = document.getElementById('regRespName')?.value.trim();
+      const callsign = document.getElementById('regRespCallsign')?.value.trim().toUpperCase();
+      const agency = document.getElementById('regRespAgency')?.value.trim();
+      const badgeNumber = document.getElementById('regRespBadge')?.value.trim();
+      const type = document.getElementById('regRespType')?.value || 'MEDICAL_AMBULANCE';
+      const phone = document.getElementById('regRespPhone')?.value.trim();
+      const email = document.getElementById('regRespEmail')?.value.trim();
+      const password = document.getElementById('regRespPassword')?.value;
+      const alertBox = document.getElementById('regRespAlert');
+
+      if (!name || !callsign || !email || !password) return;
+      if (regRespSubmitBtn) {
+        regRespSubmitBtn.disabled = true;
+        regRespSubmitBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Enlisting Respondent...';
+      }
+
+      try {
+        const res = await fetch('/api/responders/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name, callsign, agency, badgeNumber, type, phone, email, password,
+            tosAgreed: true,
+            lat: baseLat + 0.002,
+            lng: baseLng + 0.003
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to enlist respondent unit.');
+
+        if (data.token) {
+          try { localStorage.setItem('crisiscore_token', data.token); } catch(e){}
+        }
+
+        updateUserUI(data.user);
+        hideAuthGate();
+        await loadBackendData();
+      } catch (err) {
+        if (alertBox) {
+          alertBox.style.display = 'block';
+          alertBox.className = 'auth-alert';
+          alertBox.textContent = err.message;
+        }
+      } finally {
+        if (regRespSubmitBtn) {
+          regRespSubmitBtn.disabled = !regRespTosCheck?.checked;
+          regRespSubmitBtn.innerHTML = '<span>Accept Terms & Register Respondent Unit</span> <i class="ph ph-arrow-right"></i>';
+        }
+      }
+    };
+  }
+
+  // Quick 1-Click Demo Profile Sign-In Cards
+  const roleCards = document.querySelectorAll('.quick-role-cards .role-card');
+  roleCards.forEach(card => {
+    card.onclick = async () => {
+      const email = card.getAttribute('data-email');
+      const role = card.getAttribute('data-role');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: 'password123' })
+        });
+        const data = await res.json();
+        if (res.ok && data.user) {
+          if (data.token) {
+            try { localStorage.setItem('crisiscore_token', data.token); } catch(e){}
+          }
+          updateUserUI(data.user);
+          hideAuthGate();
+          await loadBackendData();
+          return;
+        }
+      } catch (e) {
+        console.warn('API login fallback:', e);
+      }
+
+      // Offline Demo Fallback
+      const profile = DEMO_PROFILES[role];
+      if (profile) {
+        updateUserUI(profile);
+        hideAuthGate();
+      }
+    };
+  });
+
+  // Profile Dropdown Toggle
   if (userProfileBtn) {
     userProfileBtn.onclick = (e) => {
       e.stopPropagation();
@@ -1149,29 +1530,14 @@ function setupAuthUI() {
     }
   });
 
-  if (openAuthModalBtn) openAuthModalBtn.onclick = openModal;
-  if (quickAuthBtn) quickAuthBtn.onclick = openModal;
-  if (bannerSwitchBtn) bannerSwitchBtn.onclick = openModal;
-  if (closeAuthModalBtn) closeAuthModalBtn.onclick = closeModal;
+  if (openAuthModalBtn) openAuthModalBtn.onclick = showAuthGate;
+  if (quickAuthBtn) quickAuthBtn.onclick = showAuthGate;
+  if (bannerSwitchBtn) bannerSwitchBtn.onclick = showAuthGate;
 
-  const roleCards = document.querySelectorAll('.role-card');
-  roleCards.forEach(card => {
-    card.onclick = () => {
-      const role = card.getAttribute('data-role');
-      const profile = DEMO_PROFILES[role];
-      if (profile) {
-        updateUserUI(profile);
-        closeModal();
-      }
-    };
-  });
-
-  if (logoutBtn) {
-    logoutBtn.onclick = () => {
-      updateUserUI(DEMO_PROFILES.ADMIN);
-      if (profileDropdown) profileDropdown.style.display = 'none';
-    };
-  }
+  // Logout Buttons
+  if (logoutBtn) logoutBtn.onclick = handleLogout;
+  if (topbarLogoutBtn) topbarLogoutBtn.onclick = handleLogout;
+  if (sidebarLogoutBtn) sidebarLogoutBtn.onclick = handleLogout;
 }
 
 // --- WebSocket Real-Time Listener ---
@@ -1236,26 +1602,44 @@ function initSocket() {
 
     // 4. Real-time Chat message received
     socket.on('chat:message', (newMsg) => {
-      // Append to Coordinator Chat if open
+      // Append to Coordinator Tactical Ops Chat Modal if open
       if (activeOpsChatIncidentId === newMsg.incidentId && newMsg.channel === 'OPS') {
-        const stream = document.getElementById('coordinatorChatStream');
-        if (stream) {
-          const isSelf = newMsg.senderName === currentUser.name || newMsg.senderRole === currentUser.role;
+        const modalStream = document.getElementById('coordinatorChatStream');
+        if (modalStream) {
+          const isSelf = newMsg.senderName === currentUser?.name || newMsg.senderRole === currentUser?.role;
           const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const msgEl = document.createElement('div');
           msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
           msgEl.innerHTML = `
-            <div class="chat-sender">${newMsg.senderName} (${newMsg.senderRole})</div>
+            <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
             <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
             <div class="chat-time">${time}</div>
           `;
-          stream.appendChild(msgEl);
-          stream.scrollTop = stream.scrollHeight;
+          modalStream.appendChild(msgEl);
+          modalStream.scrollTop = modalStream.scrollHeight;
+        }
+
+        // Also append to Coordinator Persistent Comms Dock if open
+        const directStream = document.getElementById('coordinatorDirectChatStream');
+        if (directStream) {
+          const hint = directStream.querySelector('.chat-empty-hint');
+          if (hint) hint.remove();
+          const isSelf = newMsg.senderName === currentUser?.name || newMsg.senderRole === 'COORDINATOR';
+          const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const msgEl = document.createElement('div');
+          msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          msgEl.innerHTML = `
+            <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
+            <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
+            <div class="chat-time">${time}</div>
+          `;
+          directStream.appendChild(msgEl);
+          directStream.scrollTop = directStream.scrollHeight;
         }
       }
 
       // Append to Responder Chat if in responder view
-      if (currentUser.role === 'RESPONDER') {
+      if (currentUser?.role === 'RESPONDER') {
         if (newMsg.channel === activeResponderChannel) {
           const stream = document.getElementById('responderChatStream');
           if (stream) {
@@ -1264,7 +1648,7 @@ function initSocket() {
             const msgEl = document.createElement('div');
             msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
             msgEl.innerHTML = `
-              <div class="chat-sender">${newMsg.senderName} (${newMsg.senderRole})</div>
+              <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
               <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
               <div class="chat-time">${time}</div>
             `;
@@ -1274,6 +1658,26 @@ function initSocket() {
         } else if (newMsg.channel === 'CIVILIAN') {
           const dot = document.getElementById('civUnreadDot');
           if (dot) dot.style.display = 'block';
+        }
+      }
+
+      // Append to Civilian View Live Chat Dock if open
+      if (activeCivilianIncident && (newMsg.incidentId === activeCivilianIncident.dbId || newMsg.incidentId === activeCivilianIncident.id) && newMsg.channel === 'CIVILIAN') {
+        const civStream = document.getElementById('civilianViewChatStream');
+        if (civStream) {
+          const hint = civStream.querySelector('.chat-empty-hint');
+          if (hint) hint.remove();
+          const isSelf = newMsg.senderRole === 'CIVILIAN';
+          const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const msgEl = document.createElement('div');
+          msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          msgEl.innerHTML = `
+            <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
+            <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
+            <div class="chat-time">${time}</div>
+          `;
+          civStream.appendChild(msgEl);
+          civStream.scrollTop = civStream.scrollHeight;
         }
       }
     });
@@ -1294,8 +1698,12 @@ async function init() {
   initMap();
   setupModals();
   initSocket();
-  updateUserUI(currentUser);
-  await loadBackendData();
+  if (currentUser) {
+    updateUserUI(currentUser);
+    await loadBackendData();
+  } else {
+    showAuthGate();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
