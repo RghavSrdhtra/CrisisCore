@@ -1,5 +1,6 @@
 import './style.css';
 import { io } from 'socket.io-client';
+import { getApiBase } from './apiConfig.js';
 
 // --- State Management ---
 let socket = null;
@@ -953,15 +954,36 @@ function setupCivilianView() {
       }
 
       try {
+        let incidentLat = baseLat + 0.005;
+        let incidentLng = baseLng - 0.004;
+        let locSource = 'MANUAL';
+
+        if (consent && typeof navigator !== 'undefined' && navigator.geolocation) {
+          try {
+            const pos = await new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 10000
+              });
+            });
+            incidentLat = pos.coords.latitude;
+            incidentLng = pos.coords.longitude;
+            locSource = 'GPS';
+          } catch (posErr) {
+            console.warn('GPS location lookup skipped or timed out, using fallback coordinates:', posErr);
+          }
+        }
+
         const payload = {
           type: type.toUpperCase(),
           affectedCount: parseInt(affected, 10),
           severity: 'HIGH',
           description: desc,
           reporterContact: contactPhone,
-          lat: baseLat + 0.005,
-          lng: baseLng - 0.004,
-          source: 'GPS',
+          lat: incidentLat,
+          lng: incidentLng,
+          source: locSource,
           locationSharingActive: Boolean(consent)
         };
 
@@ -1543,7 +1565,7 @@ function setupAuthUI() {
 // --- WebSocket Real-Time Listener ---
 function initSocket() {
   try {
-    socket = io();
+    socket = io(getApiBase() || undefined);
 
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Gateway:', socket.id);

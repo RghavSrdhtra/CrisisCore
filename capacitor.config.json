@@ -1,5 +1,8 @@
 {
   "appId": "org.crisiscore.app",
   "appName": "CrisisCore",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "cleartext": true
+  }
 }

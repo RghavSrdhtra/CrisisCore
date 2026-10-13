@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getApiBase } from './apiConfig.js';
 
 // --- State Variables ---
 let currentLat = 28.6139; // Default Delhi coordinates
@@ -493,7 +494,7 @@ function connectSocketIO() {
   const connText = document.getElementById('connText');
 
   try {
-    socket = io();
+    socket = io(getApiBase() || undefined);
 
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Dispatch Gateway:', socket.id);
