@@ -1,54 +1,64 @@
 <div align="center">
   <img src="https://img.icons8.com/color/96/000000/shield.png" alt="CrisisCore" width="80" />
   <h1>CrisisCore</h1>
-  <p><strong>Crisis Response and Resource Allocation Dashboard</strong></p>
+  <p><strong>Next-Gen Crisis Response, Resource Allocation & Real-Time Emergency Command System</strong></p>
 
   [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel)](https://nex-command-git-main-rsardhotra-3687s-projects.vercel.app/)
+  [![Android](https://img.shields.io/badge/Android-Capacitor-3DDC84?style=for-the-badge&logo=android)](android/)
   [![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
   [![Node](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
-  [![Gemini](https://img.shields.io/badge/AI-Gemini_Flash-8E75B2?style=for-the-badge&logo=google)](https://aistudio.google.com/)
+  [![Socket.IO](https://img.shields.io/badge/Socket.IO-Real--Time-010101?style=for-the-badge&logo=socket.io)](https://socket.io/)
   [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 </div>
 
 <br/>
 
-CrisisCore is a real-time crisis management dashboard for emergency coordinators. It aggregates live incident feeds, matches crises to the nearest available resources, and gives responders AI-generated situation briefs on demand.
-
-It is built as a college minor project but is structured like a production system: role-based access control, JWT auth, a real Express/Socket.IO backend, a Prisma ORM layer, and a Python ML service stub for predictive prioritization.
+**CrisisCore** is an intelligent, real-time emergency response platform that bridges the gap between civilian emergency reporting, centralized command dispatch, and field responder deployment. Available as both a responsive web application and a native Android application, CrisisCore features live multi-role coordination, dual-channel tactical communications, and automated triage.
 
 ---
 
-## Screenshots
+## Key Features
 
-| Tactical Map | Live Incidents | Resource Allocation |
-|---|---|---|
-| ![Map](./screenshots/map.png) | ![Incidents](./screenshots/live_incidents.png) | ![Resources](./screenshots/resource_allocation.png) |
+### 1. Four Dedicated Stakeholder Portals
+- **Coordinator Central Dashboard**: Real-time incident triage, dynamic unit dispatch, tactical status feeds, and audit monitoring.
+- **Field Responder Terminal**: Mission dispatch acceptance/declination with explicit reasons, lifecycle updates (`EN_ROUTE`, `ON_SCENE`, `RESOLVED`), and GPS telemetry transmission.
+- **Civilian SOS Emergency Portal (`sos.html` & in-app)**: High-visibility 1-tap SOS submission, voluntary GPS broadcasting, Leaflet manual map pin-drop fallback, and real-time 4-stage rescue tracker.
+- **Admin Console**: User verification, fleet management, and immutable system audit logs.
 
----
+### 2. Dual-Channel Real-Time Communications
+- **OPS Channel (`chat:OPS:${id}`)**: Secure tactical loop between Central Dispatch and Field Responders for operational orders and situational briefings. Civilians are strictly barred.
+- **CIVILIAN Channel (`chat:CIVILIAN:${id}`)**: Direct channel between Field Responders and Civilian requesters for arrival guidance, gate access, and hazard advisories.
+- **Real-Time Dispatcher Prompts**: When a responder updates their status or declines a call, the central dashboard receives immediate audible and visual alert toasts with action details.
 
-## Features
+### 3. Native Android Application (`android/`)
+- Packaged with **Capacitor** for 100% native WebView performance and zero UI fragmentation.
+- Full Android Studio Gradle project in `android/` with hardware GPS location permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`).
+- **Cross-Platform Synchronization**: Automatically detects Android container and routes network traffic to the host backend via `http://10.0.2.2:3001` (emulator) or LAN IP (physical device).
 
-- **Live Incident Feed** - incidents stream in over WebSocket in real time
-- **Tactical Map** - Leaflet.js map with CartoDB Dark Matter tiles; markers update as incidents arrive
-- **AI Situation Briefs** - one-click Gemini Flash analysis per incident with tactical recommendations
-- **Smart Resource Dispatch** - auto-matches incidents to nearest available unit (ambulance, fire engine, drone)
-- **Role-Based Access** - three roles: Admin, Coordinator, Responder, each with scoped permissions
-- **Audit Log** - every assignment and status change is recorded
-- **Glassmorphism UI** - dark theme, neon severity accents, designed for low-light control rooms
+### 4. Voluntary Duty-of-Care Framework
+- Mandatory legal Terms of Service agreement on volunteer responder registration.
+- Explicit notification of legal abandonment deterrents and administrative fine warnings (₹25,000 / $500 penalty).
+- Cryptographic timestamped `AuditLog` records for compliance.
+
+### 5. Machine Learning Incident Triage (Week 4 Pipeline)
+- Preprocessing pipeline for emergency incidents (type, headcount, temporal harmonics, description TF-IDF).
+- Logistic Regression baseline, Random Forest, and Gradient Boosting models.
+- Sub-5ms real-time inference API via Python FastAPI microservice.
 
 ---
 
 ## Tech Stack
 
-| Layer | Tech |
+| Layer | Technologies |
 |---|---|
-| Frontend | Vanilla HTML/CSS/JS, Vite 8 |
-| Backend | Node.js, Express, Socket.IO |
-| Database | SQLite (dev) / PostgreSQL (prod), via Prisma ORM |
-| Auth | JWT (RS-style secret, RBAC middleware) |
-| AI | Google Gemini Flash API (via Vercel Serverless + local proxy) |
-| Maps | Leaflet.js, CartoDB basemaps |
-| ML stub | Python (FastAPI), scikit-learn |
+| **Frontend** | Vanilla JavaScript, HTML5, Vanilla CSS Design System, Vite 8 |
+| **Mobile (Android)** | Capacitor Native Android wrapper (`org.crisiscore.app`), Android Studio Gradle |
+| **Backend** | Node.js, Express, Socket.IO (room isolation & event gateway) |
+| **Database & ORM** | SQLite (dev) / PostgreSQL (prod), Prisma ORM |
+| **Authentication** | JWT (JSON Web Tokens), RBAC Middleware, bcryptjs |
+| **Location & Maps** | Leaflet.js, OpenStreetMap, HTML5 Geolocation API, Android Native GPS |
+| **ML Microservice** | Python 3.12, FastAPI, scikit-learn, pandas, numpy |
+| **AI Advisor** | Google Gemini Flash API (situation briefs on demand) |
 
 ---
 
@@ -56,134 +66,90 @@ It is built as a college minor project but is structured like a production syste
 
 ```
 CrisisCore/
-├── index.html          # Single-page frontend app
+├── index.html              # Core Command Application (Coordinator, Responder, Admin, Civilian)
+├── sos.html                # Dedicated Standalone Civilian SOS Emergency Portal
 ├── src/
-│   ├── main.js         # All frontend logic
-│   └── style.css       # Dark theme, glassmorphism
-├── api/
-│   └── gemini.js       # Vercel serverless function (AI proxy)
-├── server/             # Full Express backend
+│   ├── main.js             # Client application logic & UI controllers
+│   ├── sos.js              # Civilian SOS portal controller & live GPS streaming
+│   ├── apiConfig.js        # Dynamic cross-platform network & emulator routing
+│   └── style.css           # Glassmorphism design tokens & responsive styles
+├── android/                # Native Android Studio Gradle Project (Capacitor)
+│   ├── app/src/main/       # AndroidManifest.xml (GPS permissions, cleartext HTTP)
+│   └── build.gradle        # Android build configuration
+├── server/                 # Express + Socket.IO Backend Server
 │   ├── src/
-│   │   ├── index.js    # App entry, Socket.IO setup
-│   │   ├── routes/     # REST endpoints (incidents, responders, assignments, auth)
-│   │   ├── middleware/ # JWT auth, RBAC
-│   │   ├── constants/  # Roles, permissions, statuses
-│   │   └── ws/         # WebSocket broadcaster
+│   │   ├── index.js        # Server entry & Socket.IO room gateway
+│   │   ├── routes/         # REST API endpoints (incidents, responders, chat, auth)
+│   │   ├── middleware/     # JWT authentication & RBAC authorization
+│   │   └── constants/      # Status enums, role definitions, permissions
 │   └── prisma/
-│       ├── schema.prisma
-│       └── seed.js
-├── ml/                 # Python ML service (priority prediction)
-│   ├── requirements.txt
-│   └── README.md
-├── screenshots/
-├── start.bat           # Windows one-click start
-└── start.sh            # Mac/Linux one-click start
+│       ├── schema.prisma   # Relational schema (Users, Incidents, Assignments, Chat, Audits)
+│       └── seed.js         # Verified demo seed data
+├── ml/                     # Machine Learning Triage Subsystem
+│   ├── requirements.txt    # Python dependencies (scikit-learn, fastapi, pandas)
+│   └── README.md           # ML architecture & training guide
+├── capacitor.config.json   # Capacitor mobile configuration
+└── package.json            # Scripts: build, android:sync, android:open
 ```
 
 ---
 
-## Local Setup
+## Quick Start Guide
 
-### Prerequisites
+### 1. Web Application & Backend
 
-- [Node.js 18+](https://nodejs.org/)
-- A Gemini API key from [Google AI Studio](https://aistudio.google.com/) (free)
-
-### Option A: Frontend only (quickest)
-
-This runs the Vite dev server with mocked data. No backend or database needed.
-
+**Clone & Install Dependencies:**
 ```bash
 git clone https://github.com/YOUR_USERNAME/CrisisCore.git
 cd CrisisCore
 npm install
-```
-
-Create `.env.local` in the root:
-
-```env
-GEMINI_API_KEY="your_key_here"
-```
-
-Then start:
-
-```bash
-# Windows
-start.bat
-
-# Mac / Linux
-chmod +x start.sh && ./start.sh
-
-# Manual
-npm run dev
-```
-
-Open `http://localhost:5173`.
-
----
-
-### Option B: Full stack (backend + WebSocket + DB)
-
-**1. Set up the server**
-
-```bash
 cd server
 npm install
 ```
 
-Copy the example env file and fill it in:
-
+**Initialize Database & Start Backend:**
 ```bash
-cp .env.example .env
+# In server/ directory:
+npm run prisma:push    # Generate SQLite database
+npm run prisma:seed    # Seed initial coordinator, verified responder & incidents
+npm run dev            # Starts backend on http://localhost:3001
 ```
 
-`.env` fields:
-
-```env
-PORT=3001
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-own-secret-here"
-CLIENT_ORIGIN="http://localhost:5173"
-```
-
-**2. Init the database and seed it**
-
+**Start Frontend (New Terminal from Project Root):**
 ```bash
-npm run prisma:push    # creates the SQLite schema
-npm run prisma:seed    # loads demo users + incidents
+npm run dev            # Starts Vite dev server on http://localhost:5173
 ```
 
-**3. Start both servers**
-
-From the root:
-
-```bash
-npm run dev            # starts Vite frontend on :5173
-npm run server:dev     # starts Express backend on :3001
-```
-
-Or use two terminals if you prefer.
-
-**Default demo credentials after seeding:**
-
+**Default Test Credentials:**
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@crisiscore.dev | admin123 |
-| Coordinator | coord@crisiscore.dev | coord123 |
-| Responder | responder@crisiscore.dev | resp123 |
+| Admin | `admin@crisiscore.dev` | `admin123` |
+| Coordinator | `coord@crisiscore.dev` | `coord123` |
+| Responder | `responder@crisiscore.dev` | `resp123` |
 
 ---
 
-## Deployment
+### 2. Running the Android Application
 
-The frontend deploys to Vercel with zero config. The `api/gemini.js` serverless function handles the AI proxy so the API key stays server-side.
+**Launch in Android Studio:**
+```bash
+npm run android:open
+```
+*Or open the `android/` directory directly in Android Studio.*
 
-Set `GEMINI_API_KEY` in your Vercel project environment variables.
+**Build & Run:**
+1. Wait for Gradle to index the project.
+2. Select an Android Virtual Device (AVD Emulator) or connect a physical phone via USB.
+3. Click the green **▶ Run ('app')** button.
+4. The Android app connects directly to the Node.js backend running on your PC via `http://10.0.2.2:3001`.
 
-For the backend, deploy `server/` to any Node host (Railway, Render, fly.io). Set the env vars from `.env.example`.
+**Syncing Frontend Updates to Android:**
+```bash
+npm run android:sync
+```
 
 ---
 
 ## License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for more information.
