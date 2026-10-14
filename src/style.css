@@ -46,7 +46,31 @@ body {
   height: 100vh;
 }
 
-/* ─── Sidebar ─── */
+/* ─── Sidebar & Mobile Drawer ─── */
+.sidebar-backdrop {
+  display: none;
+}
+
+.sidebar-close-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
 .sidebar {
   width: 260px;
   background: var(--bg-raised);
@@ -54,12 +78,13 @@ body {
   display: flex;
   flex-direction: column;
   padding: 20px 16px;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   padding: 0 8px;
   margin-bottom: 36px;
 }
@@ -173,6 +198,41 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.topbar-left-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mobile-brand-title {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.mobile-brand-title i {
+  color: var(--amber);
+  font-size: 20px;
 }
 
 .search-bar {
@@ -3218,6 +3278,325 @@ input:checked + .slider:before {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST APP EXPERIENCE & NATIVE DRAWER NAVIGATION
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* Mobile Bottom Navigation Bar */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 868px) {
+  body {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
+  .app-layout {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 1. Off-Canvas Slide-Out Mobile Drawer */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 1040;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 290px;
+    max-width: 84vw;
+    height: 100%;
+    height: 100dvh;
+    z-index: 1050;
+    background: #12151f;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.85);
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 14px;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close-btn {
+    display: inline-flex;
+  }
+
+  .brand {
+    margin-bottom: 24px;
+    padding: 0 4px;
+  }
+
+  /* 2. Mobile Topbar Optimizations */
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .mobile-brand-title {
+    display: flex;
+  }
+
+  .topbar {
+    padding: 4px 0;
+  }
+
+  .search-bar {
+    display: none;
+  }
+
+  .topbar-actions {
+    gap: 8px;
+  }
+
+  .user-profile-btn {
+    padding: 4px 6px;
+  }
+
+  .user-profile-btn .user-info-text {
+    display: none;
+  }
+
+  /* 3. Main Dashboard & Viewports */
+  .main-dashboard {
+    flex: 1;
+    padding: 12px 14px 80px 14px;
+    gap: 14px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .role-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+
+  .role-banner .banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .banner-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  /* 4. Single-Column Grids for Mobile */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .col-main, .col-side {
+    width: 100%;
+    gap: 14px;
+  }
+
+  .metrics-row {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .metric-card {
+    padding: 10px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .metric-value {
+    font-size: 16px;
+  }
+
+  .metric-label {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .map-panel {
+    min-height: 280px;
+  }
+
+  #map, .map-container, #tacticalMap {
+    height: 280px !important;
+    min-height: 280px !important;
+  }
+
+  .incident-card {
+    padding: 12px;
+  }
+
+  .incident-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .incident-actions select, .incident-actions button {
+    width: 100%;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .type-selector-pills {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .type-pill {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 10px;
+  }
+
+  .btn-submit-sos, .btn-accept-dispatch, .btn-mission-step {
+    min-height: 46px;
+    font-size: 13px;
+  }
+
+  .chat-stream {
+    height: 220px;
+    max-height: 220px;
+  }
+
+  .chat-header-tabs {
+    flex-wrap: nowrap;
+  }
+
+  .chat-tab-btn {
+    font-size: 11px;
+    padding: 8px;
+  }
+
+  /* 5. Fixed Mobile Bottom Navigation Bar */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(13, 16, 24, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    padding: 0 8px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    align-items: center;
+    justify-content: space-around;
+  }
+
+  .bnav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 0;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    gap: 3px;
+    min-height: 48px;
+  }
+
+  .bnav-item i {
+    font-size: 20px;
+    transition: transform var(--transition-fast), color var(--transition-fast);
+  }
+
+  .bnav-item:hover, .bnav-item.active {
+    color: var(--cyan);
+  }
+
+  .bnav-item.active i {
+    transform: translateY(-2px);
+    color: var(--cyan);
+  }
+
+  .bnav-item.bnav-sos {
+    position: relative;
+    color: #ff7b72;
+  }
+
+  .bnav-sos-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+    margin-top: -18px;
+    margin-bottom: 2px;
+    border: 2px solid #0f1117;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: bnavPulse 2.5s infinite;
+  }
+
+  @keyframes bnavPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+
+  .bnav-sos-circle i {
+    font-size: 20px;
+    color: #ffffff !important;
+    transform: none !important;
+  }
+
+  .bnav-item.bnav-sos.active .bnav-sos-circle,
+  .bnav-item.bnav-sos:active .bnav-sos-circle {
+    transform: scale(0.92);
+  }
 }
 
 

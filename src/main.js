@@ -625,6 +625,20 @@ function updateUserUI(user) {
   }
 }
 
+function openMobileSidebar() {
+  const sidebarNav = document.getElementById('sidebarNav');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  if (sidebarNav) sidebarNav.classList.add('open');
+  if (sidebarBackdrop) sidebarBackdrop.classList.add('active');
+}
+
+function closeMobileSidebar() {
+  const sidebarNav = document.getElementById('sidebarNav');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  if (sidebarNav) sidebarNav.classList.remove('open');
+  if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+}
+
 function switchView(viewName) {
   const dashboardView = document.getElementById('dashboardView');
   const responderView = document.getElementById('responderView');
@@ -634,22 +648,30 @@ function switchView(viewName) {
   const navSOSPortal = document.getElementById('navSOSPortal');
   const navResponderTerminal = document.getElementById('navResponderTerminal');
 
+  // Automatically close mobile drawer upon navigation
+  closeMobileSidebar();
+
   if (comingSoonView) comingSoonView.style.display = 'none';
 
-  // Deactivate all sidebar nav items
+  // Deactivate all sidebar nav items & bottom nav items
   document.querySelectorAll('.side-nav .nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.mobile-bottom-nav .bnav-item').forEach(el => el.classList.remove('active'));
 
   if (viewName === 'civilian') {
     if (dashboardView) dashboardView.style.display = 'none';
     if (responderView) responderView.style.display = 'none';
     if (civilianView) civilianView.style.display = 'grid';
     if (navSOSPortal) navSOSPortal.classList.add('active');
+    const bnavSOS = document.getElementById('bnavSOS');
+    if (bnavSOS) bnavSOS.classList.add('active');
     setupCivilianView();
   } else if (viewName === 'responder') {
     if (dashboardView) dashboardView.style.display = 'none';
     if (responderView) responderView.style.display = 'grid';
     if (civilianView) civilianView.style.display = 'none';
     if (navResponderTerminal) navResponderTerminal.classList.add('active');
+    const bnavResponder = document.getElementById('bnavResponder');
+    if (bnavResponder) bnavResponder.classList.add('active');
     setupResponderView();
   } else {
     // Default: Command Center dashboard
@@ -657,6 +679,8 @@ function switchView(viewName) {
     if (responderView) responderView.style.display = 'none';
     if (civilianView) civilianView.style.display = 'none';
     if (navCommandCenter) navCommandCenter.classList.add('active');
+    const bnavCommand = document.getElementById('bnavCommand');
+    if (bnavCommand) bnavCommand.classList.add('active');
     renderAll();
     if (map) {
       setTimeout(() => map.invalidateSize(), 150);
@@ -1328,8 +1352,84 @@ function setupNavHandlers() {
   if (navAuditLogs) {
     navAuditLogs.onclick = (e) => {
       e.preventDefault();
+      closeMobileSidebar();
       const auditModal = document.getElementById('auditModal');
       if (auditModal) auditModal.style.display = 'flex';
+    };
+  }
+
+  // Mobile Drawer Open / Close Handlers
+  const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+  const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+  if (mobileMenuToggle) {
+    mobileMenuToggle.onclick = (e) => {
+      e.preventDefault();
+      openMobileSidebar();
+    };
+  }
+
+  if (sidebarCloseBtn) {
+    sidebarCloseBtn.onclick = (e) => {
+      e.preventDefault();
+      closeMobileSidebar();
+    };
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.onclick = (e) => {
+      e.preventDefault();
+      closeMobileSidebar();
+    };
+  }
+
+  // Mobile Bottom Navigation Bar Buttons
+  const bnavCommand = document.getElementById('bnavCommand');
+  const bnavMap = document.getElementById('bnavMap');
+  const bnavSOS = document.getElementById('bnavSOS');
+  const bnavResponder = document.getElementById('bnavResponder');
+  const bnavMenu = document.getElementById('bnavMenu');
+
+  if (bnavCommand) {
+    bnavCommand.onclick = (e) => {
+      e.preventDefault();
+      switchView('dashboard');
+    };
+  }
+
+  if (bnavMap) {
+    bnavMap.onclick = (e) => {
+      e.preventDefault();
+      switchView('dashboard');
+      document.querySelectorAll('.mobile-bottom-nav .bnav-item').forEach(el => el.classList.remove('active'));
+      bnavMap.classList.add('active');
+      const mapEl = document.getElementById('map') || document.querySelector('.map-panel');
+      if (mapEl) {
+        mapEl.scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+      }
+    };
+  }
+
+  if (bnavSOS) {
+    bnavSOS.onclick = (e) => {
+      e.preventDefault();
+      switchView('civilian');
+    };
+  }
+
+  if (bnavResponder) {
+    bnavResponder.onclick = (e) => {
+      e.preventDefault();
+      switchView('responder');
+    };
+  }
+
+  if (bnavMenu) {
+    bnavMenu.onclick = (e) => {
+      e.preventDefault();
+      openMobileSidebar();
     };
   }
 }

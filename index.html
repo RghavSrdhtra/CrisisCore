@@ -26,12 +26,20 @@
 <body>
   <div class="app-layout">
     
+    <!-- Mobile Backdrop Overlay -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebarNav">
       <div class="brand">
-        <i class="ph-fill ph-shield-warning neon-icon"></i>
-        <h1>CrisisCore</h1>
-        <span style="font-size: 11px; color: var(--text-dim); margin-left: -6px;">v1</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="ph-fill ph-shield-warning neon-icon"></i>
+          <h1>CrisisCore</h1>
+          <span style="font-size: 11px; color: var(--text-dim); margin-left: -6px;">v1</span>
+        </div>
+        <button type="button" class="btn-icon sidebar-close-btn" id="sidebarCloseBtn" title="Close Sidebar">
+          <i class="ph ph-x"></i>
+        </button>
       </div>
       
       <nav class="side-nav">
@@ -76,9 +84,18 @@
       
       <!-- Topbar -->
       <header class="topbar">
-        <div class="search-bar">
-          <i class="ph ph-magnifying-glass"></i>
-          <input type="text" placeholder="Search incidents, resources..." />
+        <div class="topbar-left-group">
+          <button type="button" class="btn-icon mobile-menu-btn" id="mobileMenuToggle" title="Open Navigation Menu">
+            <i class="ph ph-list"></i>
+          </button>
+          <div class="mobile-brand-title">
+            <i class="ph-fill ph-shield-warning neon-icon"></i>
+            <span>CrisisCore</span>
+          </div>
+          <div class="search-bar">
+            <i class="ph ph-magnifying-glass"></i>
+            <input type="text" placeholder="Search incidents, resources..." />
+          </div>
         </div>
         
         <div class="topbar-actions">
@@ -446,6 +463,32 @@
         </div>
       </div>
     </main>
+
+    <!-- Mobile Bottom Navigation Bar (Thumb-Accessible Native Controls) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+      <button type="button" class="bnav-item active" id="bnavCommand" data-view="dashboard">
+        <i class="ph ph-squares-four"></i>
+        <span>Command</span>
+      </button>
+      <button type="button" class="bnav-item" id="bnavMap" data-view="map">
+        <i class="ph ph-map-trifold"></i>
+        <span>Map</span>
+      </button>
+      <button type="button" class="bnav-item bnav-sos" id="bnavSOS" data-view="civilian">
+        <div class="bnav-sos-circle">
+          <i class="ph-fill ph-phone-call"></i>
+        </div>
+        <span>SOS</span>
+      </button>
+      <button type="button" class="bnav-item" id="bnavResponder" data-view="responder">
+        <i class="ph-fill ph-ambulance"></i>
+        <span>Units</span>
+      </button>
+      <button type="button" class="bnav-item" id="bnavMenu">
+        <i class="ph ph-list"></i>
+        <span>Menu</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Admin Privacy & Audit Logs Modal -->
