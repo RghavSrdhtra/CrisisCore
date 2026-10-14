@@ -5,7 +5,10 @@ export function initializeWebSocket(io) {
   io.on('connection', (socket) => {
     console.log(`🔌 Client connected: ${socket.id}`);
 
-    // 1. Coordinators & Admins join tactical operations room
+    // All connected command dashboards receive broadcast incidents by default
+    socket.join('coordinators');
+
+    // 1. Explicit join for coordinators & admins
     socket.on('join:coordinator', (data) => {
       socket.join('coordinators');
       console.log(`📡 Socket ${socket.id} joined 'coordinators' room`);
@@ -101,9 +104,10 @@ export function initializeWebSocket(io) {
 
 // Broadcasting helper methods for use in REST controllers
 export const wsBroadcaster = {
-  // Broadcast new incident to coordinators
+  // Broadcast new incident to all dashboards and coordinators room
   notifyNewIncident: (io, incident) => {
     if (!io) return;
+    io.emit('incident:new', incident);
     io.to('coordinators').emit('incident:new', incident);
   },
 

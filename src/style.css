@@ -94,6 +94,12 @@ body {
   transition: background var(--transition-fast), color var(--transition-fast);
   font-weight: 450;
   font-size: 14px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .nav-item i {

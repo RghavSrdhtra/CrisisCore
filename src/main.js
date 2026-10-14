@@ -289,7 +289,7 @@ function renderIncidents() {
           ` : '')}
         </div>
 
-        ${!isDispatched && !isClosed && (currentUser.role === 'COORDINATOR' || currentUser.role === 'ADMIN') ? `
+        ${!isDispatched && !isClosed && (!currentUser || currentUser?.role === 'COORDINATOR' || currentUser?.role === 'ADMIN') ? `
           <div class="incident-dispatch-box">
             <select class="select-responder" id="sel_resp_${inc.dbId}">
               <option value="">-- Assign Unit (${availableResponders.length} available) --</option>
@@ -625,39 +625,57 @@ function updateUserUI(user) {
   }
 }
 
-function applyRolePrivileges(user) {
+function switchView(viewName) {
   const dashboardView = document.getElementById('dashboardView');
   const responderView = document.getElementById('responderView');
   const civilianView = document.getElementById('civilianView');
-  const openAuditBtn = document.getElementById('openAuditBtn');
   const comingSoonView = document.getElementById('comingSoonView');
+  const navCommandCenter = document.getElementById('navCommandCenter');
+  const navSOSPortal = document.getElementById('navSOSPortal');
+  const navResponderTerminal = document.getElementById('navResponderTerminal');
 
   if (comingSoonView) comingSoonView.style.display = 'none';
 
-  if (user.role === 'ADMIN') {
-    if (dashboardView) dashboardView.style.display = 'grid';
-    if (responderView) responderView.style.display = 'none';
-    if (civilianView) civilianView.style.display = 'none';
-    if (openAuditBtn) openAuditBtn.style.display = 'inline-flex';
-    renderAll();
-  } else if (user.role === 'COORDINATOR') {
-    if (dashboardView) dashboardView.style.display = 'grid';
-    if (responderView) responderView.style.display = 'none';
-    if (civilianView) civilianView.style.display = 'none';
-    if (openAuditBtn) openAuditBtn.style.display = 'none';
-    renderAll();
-  } else if (user.role === 'RESPONDER') {
-    if (dashboardView) dashboardView.style.display = 'none';
-    if (responderView) responderView.style.display = 'grid';
-    if (civilianView) civilianView.style.display = 'none';
-    if (openAuditBtn) openAuditBtn.style.display = 'none';
-    setupResponderView();
-  } else if (user.role === 'CIVILIAN') {
+  // Deactivate all sidebar nav items
+  document.querySelectorAll('.side-nav .nav-item').forEach(el => el.classList.remove('active'));
+
+  if (viewName === 'civilian') {
     if (dashboardView) dashboardView.style.display = 'none';
     if (responderView) responderView.style.display = 'none';
     if (civilianView) civilianView.style.display = 'grid';
-    if (openAuditBtn) openAuditBtn.style.display = 'none';
+    if (navSOSPortal) navSOSPortal.classList.add('active');
     setupCivilianView();
+  } else if (viewName === 'responder') {
+    if (dashboardView) dashboardView.style.display = 'none';
+    if (responderView) responderView.style.display = 'grid';
+    if (civilianView) civilianView.style.display = 'none';
+    if (navResponderTerminal) navResponderTerminal.classList.add('active');
+    setupResponderView();
+  } else {
+    // Default: Command Center dashboard
+    if (dashboardView) dashboardView.style.display = 'grid';
+    if (responderView) responderView.style.display = 'none';
+    if (civilianView) civilianView.style.display = 'none';
+    if (navCommandCenter) navCommandCenter.classList.add('active');
+    renderAll();
+    if (map) {
+      setTimeout(() => map.invalidateSize(), 150);
+    }
+  }
+}
+
+function applyRolePrivileges(user) {
+  const openAuditBtn = document.getElementById('openAuditBtn');
+  if (openAuditBtn) {
+    openAuditBtn.style.display = user.role === 'ADMIN' ? 'inline-flex' : 'none';
+  }
+
+  if (user.role === 'RESPONDER') {
+    switchView('responder');
+  } else if (user.role === 'CIVILIAN') {
+    switchView('civilian');
+  } else {
+    switchView('dashboard');
   }
 }
 
@@ -846,7 +864,7 @@ function setupResponderDualChat(incidentId) {
           incidentId,
           channel: activeResponderChannel,
           message: text,
-          senderName: currentUser.name,
+          senderName: currentUser?.name || 'Capt. Carlos Vance',
           senderRole: 'RESPONDER'
         });
       } else {
@@ -856,7 +874,7 @@ function setupResponderDualChat(incidentId) {
           body: JSON.stringify({
             channel: activeResponderChannel,
             message: text,
-            senderName: currentUser.name,
+            senderName: currentUser?.name || 'Capt. Carlos Vance',
             senderRole: 'RESPONDER'
           })
         });
@@ -900,8 +918,8 @@ function setupCivilianView() {
           <h4 style="color: var(--text-main); margin-bottom: 4px;">No Active Emergency</h4>
           <p style="font-size: 12px;">Submit the SOS form on the left if you require immediate emergency assistance.</p>
           <div style="margin-top: 14px;">
-            <a href="/sos.html" target="_blank" style="color: var(--cyan); font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
-              <i class="ph-fill ph-arrow-square-out"></i> Open Fullscreen SOS Interface
+            <a href="/sos.html" style="color: var(--cyan); font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+              <i class="ph-fill ph-arrow-square-out"></i> Launch Fullscreen Standalone Kiosk Mode
             </a>
           </div>
         </div>
@@ -1088,8 +1106,8 @@ function setupModals() {
           incidentId: activeOpsChatIncidentId,
           channel: 'OPS',
           message: text,
-          senderName: currentUser.name,
-          senderRole: currentUser.role
+          senderName: currentUser?.name || 'Coordinator',
+          senderRole: currentUser?.role || 'COORDINATOR'
         });
       } else {
         await fetch(`/api/chat/${activeOpsChatIncidentId}`, {
@@ -1098,8 +1116,8 @@ function setupModals() {
           body: JSON.stringify({
             channel: 'OPS',
             message: text,
-            senderName: currentUser.name,
-            senderRole: currentUser.role
+            senderName: currentUser?.name || 'Coordinator',
+            senderRole: currentUser?.role || 'COORDINATOR'
           })
         });
       }
@@ -1195,8 +1213,75 @@ function setupModals() {
   // 5. Coordinator Comms Dock Wiring
   setupCoordinatorCommsDock();
 
-  // 6. Auth Gate & Session Management
+  // 6. Navigation Bar & View Handlers
+  setupNavHandlers();
+
+  // 7. Auth Gate & Session Management
   setupAuthUI();
+}
+
+function setupNavHandlers() {
+  const navCommandCenter = document.getElementById('navCommandCenter');
+  const navSOSPortal = document.getElementById('navSOSPortal');
+  const navResponderTerminal = document.getElementById('navResponderTerminal');
+  const navFullMap = document.getElementById('navFullMap');
+  const navFleet = document.getElementById('navFleet');
+  const navAuditLogs = document.getElementById('navAuditLogs');
+  const topbarSOSBtn = document.getElementById('topbarSOSBtn');
+
+  if (navCommandCenter) {
+    navCommandCenter.onclick = (e) => {
+      e.preventDefault();
+      switchView('dashboard');
+    };
+  }
+
+  if (navSOSPortal) {
+    navSOSPortal.onclick = (e) => {
+      e.preventDefault();
+      switchView('civilian');
+    };
+  }
+
+  if (topbarSOSBtn) {
+    topbarSOSBtn.onclick = (e) => {
+      e.preventDefault();
+      switchView('civilian');
+    };
+  }
+
+  if (navResponderTerminal) {
+    navResponderTerminal.onclick = (e) => {
+      e.preventDefault();
+      switchView('responder');
+    };
+  }
+
+  if (navFullMap) {
+    navFullMap.onclick = (e) => {
+      e.preventDefault();
+      switchView('dashboard');
+      const mapEl = document.getElementById('tacticalMap');
+      if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth' });
+    };
+  }
+
+  if (navFleet) {
+    navFleet.onclick = (e) => {
+      e.preventDefault();
+      switchView('dashboard');
+      const fleetEl = document.getElementById('resourceList');
+      if (fleetEl) fleetEl.scrollIntoView({ behavior: 'smooth' });
+    };
+  }
+
+  if (navAuditLogs) {
+    navAuditLogs.onclick = (e) => {
+      e.preventDefault();
+      const auditModal = document.getElementById('auditModal');
+      if (auditModal) auditModal.style.display = 'flex';
+    };
+  }
 }
 
 function showAuthGate() {
@@ -1569,8 +1654,9 @@ function initSocket() {
 
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Gateway:', socket.id);
-      if (currentUser?.role === 'COORDINATOR' || currentUser?.role === 'ADMIN') {
-        socket.emit('join:coordinator');
+      socket.emit('join:coordinator');
+      if (currentUser?.role === 'RESPONDER') {
+        socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
       }
     });
 
@@ -1584,6 +1670,24 @@ function initSocket() {
         updateMetrics();
         renderAll();
         addMapMarker(incObj);
+
+        // Update Comms select dropdown if visible
+        const commsSelect = document.getElementById('commsIncidentSelect');
+        if (commsSelect && incObj.dbId) {
+          const opt = document.createElement('option');
+          opt.value = incObj.dbId;
+          opt.textContent = `${incObj.id} — ${incObj.type} (${incObj.location})`;
+          commsSelect.appendChild(opt);
+        }
+
+        // Audible/visual Dispatcher prompt notification
+        showDispatcherPrompt({
+          type: 'DECLINED',
+          responderName: 'EMERGENCY INTAKE (SOS)',
+          callsign: incObj.type,
+          notes: `New distress signal reported at ${incObj.location} (${incObj.affected} affected)`,
+          incidentNumber: incObj.id
+        });
       }
     });
 
@@ -1605,7 +1709,7 @@ function initSocket() {
       console.log('🔔 Dispatcher Action Prompt received:', actionPayload);
       showDispatcherPrompt(actionPayload);
       loadBackendData();
-      if (currentUser.role === 'RESPONDER') {
+      if (currentUser?.role === 'RESPONDER') {
         setupResponderView();
       }
     });

@@ -35,13 +35,27 @@
       </div>
       
       <nav class="side-nav">
-        <a href="#" class="nav-item active"><i class="ph ph-squares-four"></i> Command Center</a>
-        <a href="/sos.html" target="_blank" class="nav-item" style="color: #ff7b72;" title="Open standalone Civilian SOS emergency form"><i class="ph-fill ph-phone-call"></i> SOS Portal (External)</a>
-        <a href="#" class="nav-item"><i class="ph ph-map-trifold"></i> Full Map</a>
-        <a href="#" class="nav-item"><i class="ph ph-ambulance"></i> Fleet</a>
-        <a href="#" class="nav-item"><i class="ph ph-chart-line-up"></i> Analytics</a>
-        <a href="#" class="nav-item"><i class="ph ph-gear"></i> Settings</a>
-        <button type="button" class="nav-item btn-sidebar-logout" id="sidebarLogoutBtn" style="color: #ff7b72; margin-top: auto; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px;"><i class="ph ph-sign-out"></i> Log Out</button>
+        <button type="button" class="nav-item active" id="navCommandCenter" title="Central Command Dispatch Dashboard">
+          <i class="ph ph-squares-four"></i> Command Center
+        </button>
+        <button type="button" class="nav-item" id="navSOSPortal" style="color: #ff7b72;" title="Civilian Emergency SOS Portal (In-App)">
+          <i class="ph-fill ph-phone-call"></i> SOS Portal (In-App)
+        </button>
+        <button type="button" class="nav-item" id="navResponderTerminal" style="color: #f59e0b;" title="Field Responder Tactical Terminal">
+          <i class="ph-fill ph-ambulance"></i> Responder Unit
+        </button>
+        <button type="button" class="nav-item" id="navFullMap" title="View Tactical Map">
+          <i class="ph ph-map-trifold"></i> Tactical Map
+        </button>
+        <button type="button" class="nav-item" id="navFleet" title="View Fleet and Resource Allocation">
+          <i class="ph ph-truck"></i> Fleet Units
+        </button>
+        <button type="button" class="nav-item" id="navAuditLogs" title="View Security & Privacy Audit Ledger">
+          <i class="ph-fill ph-file-lock"></i> Privacy & Audits
+        </button>
+        <button type="button" class="nav-item btn-sidebar-logout" id="sidebarLogoutBtn" style="color: #ff7b72; margin-top: auto; border: none; background: transparent; cursor: pointer; text-align: left; width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
+          <i class="ph ph-sign-out"></i> Log Out
+        </button>
       </nav>
       
       <div class="system-health">
@@ -68,7 +82,9 @@
         </div>
         
         <div class="topbar-actions">
-          <a href="/sos.html" target="_blank" class="btn-icon" title="Open Civilian Emergency SOS Portal in new window" style="text-decoration: none; color: #ff7b72;"><i class="ph-fill ph-phone-call"></i></a>
+          <button type="button" class="btn-icon" id="topbarSOSBtn" title="Emergency SOS Portal" style="border: none; background: transparent; cursor: pointer; color: #ff7b72;">
+            <i class="ph-fill ph-phone-call"></i>
+          </button>
           <button class="btn-icon" id="quickAuthBtn" title="Switch Account / Login"><i class="ph ph-user-switch"></i></button>
           <button class="btn-icon" id="topbarLogoutBtn" title="Log Out / Exit Session" style="color: #ff7b72;"><i class="ph ph-sign-out"></i></button>
           
