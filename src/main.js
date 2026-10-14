@@ -487,7 +487,7 @@ function renderChatStream(container, messages, currentUserName) {
   }
 
   container.innerHTML = messages.map(m => {
-    const isSelf = m.senderName === currentUserName || m.senderRole === currentUser.role;
+    const isSelf = m.senderName === currentUserName || (currentUser && m.senderRole === currentUser.role);
     const time = new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return `
       <div class="chat-msg ${isSelf ? 'self' : 'other'}">
@@ -836,7 +836,7 @@ function setupResponderDualChat(incidentId) {
     try {
       const res = await fetch(`/api/chat/${incidentId}?channel=${channel}`);
       const data = await res.json();
-      renderChatStream(stream, data.messages || [], currentUser.name);
+      renderChatStream(stream, data.messages || [], currentUser?.name || 'Responder');
     } catch (e) {
       stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 24px;">Channel standby.</div>';
     }
@@ -1047,6 +1047,56 @@ function setupCivilianView() {
           submitBtn.disabled = false;
           submitBtn.innerHTML = '<i class="ph-fill ph-phone-call"></i> TRANSMIT EMERGENCY SOS';
         }
+      }
+    };
+  }
+
+  // Civilian Live Chat Dock Wiring
+  const civChatStream = document.getElementById('civilianViewChatStream');
+  const civChatForm = document.getElementById('civilianViewChatForm');
+  const civChatInput = document.getElementById('civilianViewChatInput');
+
+  if (activeCivilianIncident?.dbId && civChatStream) {
+    fetch(`/api/chat/${activeCivilianIncident.dbId}?channel=CIVILIAN`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.messages && data.messages.length > 0) {
+          const hint = civChatStream.querySelector('.chat-empty-hint');
+          if (hint) hint.remove();
+          renderChatStream(civChatStream, data.messages, currentUser?.name || 'Civilian');
+        }
+      })
+      .catch(e => console.warn('Could not load civilian chat history:', e));
+  }
+
+  if (civChatForm) {
+    civChatForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const text = civChatInput?.value.trim();
+      if (!text) return;
+      if (!activeCivilianIncident?.dbId) {
+        alert('Please submit an emergency SOS request first to communicate with arriving rescue units.');
+        return;
+      }
+
+      civChatInput.value = '';
+
+      const payload = {
+        incidentId: activeCivilianIncident.dbId,
+        channel: 'CIVILIAN',
+        message: text,
+        senderName: currentUser?.name || 'Civilian (Reporter)',
+        senderRole: 'CIVILIAN'
+      };
+
+      if (socket && socket.connected) {
+        socket.emit('chat:send', payload);
+      } else {
+        await fetch(`/api/chat/${activeCivilianIncident.dbId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
       }
     };
   }
@@ -1704,6 +1754,50 @@ function initSocket() {
       }
     });
 
+    // Real-Time Assignment Dispatches
+    socket.on('assignment:new', (assignment) => {
+      console.log('🚨 New Assignment received via WebSocket:', assignment);
+      currentActiveResponderAssignment = assignment;
+      loadBackendData();
+      setupResponderView();
+
+      if (currentUser?.role === 'RESPONDER') {
+        showDispatcherPrompt({
+          type: 'ACCEPTED',
+          responderName: assignment.responder?.name || 'Your Unit',
+          callsign: assignment.responder?.callsign || 'UNIT',
+          notes: `New mission assigned: ${assignment.incident?.type || 'Emergency'} (${assignment.incident?.incidentNumber || ''})`,
+          incidentNumber: assignment.incident?.incidentNumber
+        });
+      }
+
+      if (activeCivilianIncident && (activeCivilianIncident.dbId === assignment.incidentId || activeCivilianIncident.id === assignment.incident?.incidentNumber)) {
+        activeCivilianIncident.status = 'DISPATCHED';
+        activeCivilianIncident.responderCallsign = assignment.responder?.callsign || 'MEDIC-01';
+        activeCivilianIncident.responderName = assignment.responder?.name || 'Emergency Unit';
+        setupCivilianView();
+      }
+    });
+
+    // Real-Time Incident Status Transitions (DISPATCHED, ON_SCENE, RESOLVED)
+    socket.on('incident:status', (statusData) => {
+      console.log('📍 Incident status update received:', statusData);
+      if (activeCivilianIncident && (activeCivilianIncident.dbId === statusData.incidentId || !statusData.incidentId || activeCivilianIncident.id === statusData.incidentNumber)) {
+        activeCivilianIncident.status = statusData.incidentStatus || statusData.status;
+        if (statusData.responderCallsign) activeCivilianIncident.responderCallsign = statusData.responderCallsign;
+        if (statusData.responderName) activeCivilianIncident.responderName = statusData.responderName;
+        setupCivilianView();
+      }
+      loadBackendData();
+      setupResponderView();
+    });
+
+    socket.on('assignment:updated', (updatedAssignment) => {
+      console.log('🔄 Assignment updated:', updatedAssignment);
+      loadBackendData();
+      setupResponderView();
+    });
+
     // 2. Real-Time Responder Action Prompts (Accept, Decline, En Route, On Scene, Completed)
     socket.on('assignment:responder_action', (actionPayload) => {
       console.log('🔔 Dispatcher Action Prompt received:', actionPayload);
@@ -1769,7 +1863,7 @@ function initSocket() {
         if (newMsg.channel === activeResponderChannel) {
           const stream = document.getElementById('responderChatStream');
           if (stream) {
-            const isSelf = newMsg.senderName === currentUser.name || newMsg.senderRole === 'RESPONDER';
+            const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === 'RESPONDER';
             const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const msgEl = document.createElement('div');
             msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;

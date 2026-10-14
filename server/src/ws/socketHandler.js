@@ -63,6 +63,8 @@ export function initializeWebSocket(io) {
 
         const room = `chat:${normalizedChannel}:${incidentId}`;
         io.to(room).emit('chat:message', savedMessage);
+        // Also emit globally so multi-view tabs and non-room sockets immediately synchronize
+        io.emit('chat:message', savedMessage);
 
         // Notify coordinator dashboard if sent on OPS channel
         if (normalizedChannel === 'OPS') {
@@ -114,6 +116,7 @@ export const wsBroadcaster = {
   // Notify coordinators and civilian of incident update
   notifyIncidentUpdated: (io, incident) => {
     if (!io) return;
+    io.emit('incident:updated', incident);
     io.to('coordinators').emit('incident:updated', incident);
     io.to(`incident:${incident.id}`).emit('incident:updated', {
       id: incident.id,
@@ -126,16 +129,20 @@ export const wsBroadcaster = {
   // Notify coordinator and assigned responder of new dispatch
   notifyNewAssignment: (io, assignment) => {
     if (!io) return;
+    io.emit('assignment:new', assignment);
     io.to('coordinators').emit('assignment:new', assignment);
     io.to(`responder:${assignment.responderId}`).emit('assignment:new', assignment);
     // Also notify civilian their incident has been dispatched
-    io.to(`incident:${assignment.incidentId}`).emit('incident:status', {
+    const statusPayload = {
+      incidentId: assignment.incidentId,
       status: 'DISPATCHED',
       responderId: assignment.responderId,
       responderName: assignment.responder?.name,
       responderCallsign: assignment.responder?.callsign,
       responderType: assignment.responder?.type
-    });
+    };
+    io.emit('incident:status', statusPayload);
+    io.to(`incident:${assignment.incidentId}`).emit('incident:status', statusPayload);
   },
 
   // Notify coordinator dashboard with prompt when respondent updates status or accepts/declines

@@ -244,13 +244,26 @@ router.patch('/:id/status', optionalAuthenticate, async (req, res) => {
 
     // Broadcast assignment state update to coordinator & civilian rooms
     if (io) {
+      io.emit('assignment:updated', updatedAssignment);
       io.to('coordinators').emit('assignment:updated', updatedAssignment);
-      io.to(`incident:${assignment.incidentId}`).emit('incident:status', {
+      const statusPayload = {
+        incidentId: assignment.incidentId,
         status: updatedAssignment.status,
         incidentStatus: updatedAssignment.status === 'COMPLETED' ? 'RESOLVED' : updatedAssignment.status,
         responderName: assignment.responder.name,
         responderCallsign: assignment.responder.callsign
+      };
+      io.emit('incident:status', statusPayload);
+      io.to(`incident:${assignment.incidentId}`).emit('incident:status', statusPayload);
+
+      // Refresh incident state for all coordinator views
+      const freshIncident = await prisma.incident.findUnique({
+        where: { id: assignment.incidentId },
+        include: { assignments: { include: { responder: true } } }
       });
+      if (freshIncident) {
+        wsBroadcaster.notifyIncidentUpdated(io, freshIncident);
+      }
     }
 
     res.json({ message: 'Assignment state updated.', assignment: updatedAssignment });
