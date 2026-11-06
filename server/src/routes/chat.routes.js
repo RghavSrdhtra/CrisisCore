@@ -140,4 +140,52 @@ router.post('/:incidentId', optionalAuthenticate, async (req, res) => {
   }
 });
 
+
+// GET /api/chat/channel/:channelName - Fetch messages for specific Admin channel (Diagram 2)
+router.get('/channel/:channelName', optionalAuthenticate, async (req, res) => {
+  try {
+    const { channelName } = req.params;
+    const messages = await prisma.chatMessage.findMany({
+      where: { channel: channelName.toUpperCase() },
+      orderBy: { createdAt: 'asc' },
+      take: 100
+    });
+    res.json({ channel: channelName.toUpperCase(), messages });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch channel messages.' });
+  }
+});
+
+// POST /api/chat/channel/:channelName - Post message directly to an Admin channel
+router.post('/channel/:channelName', optionalAuthenticate, async (req, res) => {
+  try {
+    const { channelName } = req.params;
+    const { message, senderName, senderRole, senderId } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message text is required.' });
+    }
+
+    const saved = await prisma.chatMessage.create({
+      data: {
+        channel: channelName.toUpperCase(),
+        senderId: senderId || req.user?.id || null,
+        senderName: senderName || req.user?.name || 'Central Command',
+        senderRole: senderRole || req.user?.role || 'ADMIN',
+        message: message.trim()
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`channel:${channelName.toUpperCase()}`).emit('channel:message', saved);
+      io.emit('chat:message', saved);
+    }
+
+    res.status(201).json({ message: 'Channel message sent.', chatMessage: saved });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to post channel message.' });
+  }
+});
+
 export default router;

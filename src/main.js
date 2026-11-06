@@ -276,6 +276,11 @@ function renderIncidents() {
           <button class="btn-dispatch btn-brief" onclick="getAIBrief('${inc.id}', this)">
             <i class="ph ph-chat-text"></i> Brief
           </button>
+          ${!isDispatched && !isClosed ? `
+            <button class="btn-dispatch btn-brief" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8;" onclick="openHumanApprovalModal('${inc.dbId}')">
+              <i class="ph-fill ph-brain"></i> AI Allocation & Route
+            </button>
+          ` : ''}
           
           ${isDispatched ? `
             <span class="user-role-badge badge-responder" style="padding: 4px 8px;">
@@ -489,8 +494,9 @@ function renderChatStream(container, messages, currentUserName) {
   container.innerHTML = messages.map(m => {
     const isSelf = m.senderName === currentUserName || (currentUser && m.senderRole === currentUser.role);
     const time = new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgIdAttr = m.id ? `data-msg-id="${m.id}"` : '';
     return `
-      <div class="chat-msg ${isSelf ? 'self' : 'other'}">
+      <div class="chat-msg ${isSelf ? 'self' : 'other'}" ${msgIdAttr}>
         <div class="chat-sender">${m.senderName} (${m.senderRole})</div>
         <div class="chat-bubble">${escapeHtml(m.message)}</div>
         <div class="chat-time">${time}</div>
@@ -544,6 +550,24 @@ const DEMO_PROFILES = {
     badge: 'CITIZEN',
     agency: 'Public Citizen Portal',
     avatar: 'https://ui-avatars.com/api/?name=Jane+Doe&background=10b981&color=0f172a&bold=true&size=30'
+  },
+  RESOURCE_MANAGER: {
+    id: 'usr-res-01',
+    name: 'Elena Rostova',
+    email: 'resources@test.com',
+    role: 'RESOURCE_MANAGER',
+    badge: 'RES-901',
+    agency: 'Central Emergency Relief Supply Depots',
+    avatar: 'https://ui-avatars.com/api/?name=Elena+Rostova&background=38bdf8&color=0f172a&bold=true&size=30'
+  },
+  INCIDENT_MANAGER: {
+    id: 'usr-inc-01',
+    name: 'Dr. Tariq Al-Mansoor',
+    email: 'incidents@test.com',
+    role: 'INCIDENT_MANAGER',
+    badge: 'INC-702',
+    agency: 'Disaster Triage & Field Assessment Directorate',
+    avatar: 'https://ui-avatars.com/api/?name=Tariq+Mansoor&background=a78bfa&color=0f172a&bold=true&size=30'
   }
 };
 
@@ -657,6 +681,21 @@ function switchView(viewName) {
   document.querySelectorAll('.side-nav .nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.mobile-bottom-nav .bnav-item').forEach(el => el.classList.remove('active'));
 
+  const resView = document.getElementById('resourceManagerView');
+  const incView = document.getElementById('incidentManagerView');
+  const admChView = document.getElementById('adminChannelsView');
+  const navRM = document.getElementById('navResourceManager');
+  const navIM = document.getElementById('navIncidentManager');
+  const navAC = document.getElementById('navAdminChannels');
+
+  // Reset all new views
+  if (resView) resView.style.display = 'none';
+  if (incView) incView.style.display = 'none';
+  if (admChView) admChView.style.display = 'none';
+  if (navRM) navRM.classList.remove('active');
+  if (navIM) navIM.classList.remove('active');
+  if (navAC) navAC.classList.remove('active');
+
   if (viewName === 'civilian') {
     if (dashboardView) dashboardView.style.display = 'none';
     if (responderView) responderView.style.display = 'none';
@@ -673,6 +712,27 @@ function switchView(viewName) {
     const bnavResponder = document.getElementById('bnavResponder');
     if (bnavResponder) bnavResponder.classList.add('active');
     setupResponderView();
+  } else if (viewName === 'resourceManager') {
+    if (dashboardView) dashboardView.style.display = 'none';
+    if (responderView) responderView.style.display = 'none';
+    if (civilianView) civilianView.style.display = 'none';
+    if (resView) resView.style.display = 'grid';
+    if (navRM) navRM.classList.add('active');
+    loadResourceInventory();
+  } else if (viewName === 'incidentManager') {
+    if (dashboardView) dashboardView.style.display = 'none';
+    if (responderView) responderView.style.display = 'none';
+    if (civilianView) civilianView.style.display = 'none';
+    if (incView) incView.style.display = 'grid';
+    if (navIM) navIM.classList.add('active');
+    loadIncidentManagerFeed();
+  } else if (viewName === 'adminChannels') {
+    if (dashboardView) dashboardView.style.display = 'none';
+    if (responderView) responderView.style.display = 'none';
+    if (civilianView) civilianView.style.display = 'none';
+    if (admChView) admChView.style.display = 'grid';
+    if (navAC) navAC.classList.add('active');
+    loadAdminChannel(currentAdminChannel);
   } else {
     // Default: Command Center dashboard
     if (dashboardView) dashboardView.style.display = 'grid';
@@ -1017,6 +1077,14 @@ function setupCivilianView() {
           }
         }
 
+        const needsObj = {
+          water_litres: document.getElementById('needWater')?.checked ? parseInt(affected, 10) * 15 : 0,
+          food_rations: document.getElementById('needFood')?.checked ? parseInt(affected, 10) * 3 : 0,
+          medical_kits: document.getElementById('needMedicine')?.checked ? Math.ceil(parseInt(affected, 10) / 2) : 0,
+          ambulances: document.getElementById('needAmbulance')?.checked ? 1 : 0,
+          rescue_teams: document.getElementById('needRescueTeam')?.checked ? 1 : 0
+        };
+
         const payload = {
           type: type.toUpperCase(),
           affectedCount: parseInt(affected, 10),
@@ -1026,7 +1094,8 @@ function setupCivilianView() {
           lat: incidentLat,
           lng: incidentLng,
           source: locSource,
-          locationSharingActive: Boolean(consent)
+          locationSharingActive: Boolean(consent),
+          resourceNeeds: needsObj
         };
 
         const res = await fetch('/api/incidents', {
@@ -1926,10 +1995,12 @@ function initSocket() {
       if (activeOpsChatIncidentId === newMsg.incidentId && newMsg.channel === 'OPS') {
         const modalStream = document.getElementById('coordinatorChatStream');
         if (modalStream) {
+          if (newMsg.id && modalStream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
           const isSelf = newMsg.senderName === currentUser?.name || newMsg.senderRole === currentUser?.role;
           const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const msgEl = document.createElement('div');
           msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
           msgEl.innerHTML = `
             <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
             <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
@@ -1942,12 +2013,14 @@ function initSocket() {
         // Also append to Coordinator Persistent Comms Dock if open
         const directStream = document.getElementById('coordinatorDirectChatStream');
         if (directStream) {
+          if (newMsg.id && directStream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
           const hint = directStream.querySelector('.chat-empty-hint');
           if (hint) hint.remove();
           const isSelf = newMsg.senderName === currentUser?.name || newMsg.senderRole === 'COORDINATOR';
           const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const msgEl = document.createElement('div');
           msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
           msgEl.innerHTML = `
             <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
             <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
@@ -1963,10 +2036,12 @@ function initSocket() {
         if (newMsg.channel === activeResponderChannel) {
           const stream = document.getElementById('responderChatStream');
           if (stream) {
+            if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
             const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === 'RESPONDER';
             const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const msgEl = document.createElement('div');
             msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+            if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
             msgEl.innerHTML = `
               <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
               <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
@@ -1985,12 +2060,14 @@ function initSocket() {
       if (activeCivilianIncident && (newMsg.incidentId === activeCivilianIncident.dbId || newMsg.incidentId === activeCivilianIncident.id) && newMsg.channel === 'CIVILIAN') {
         const civStream = document.getElementById('civilianViewChatStream');
         if (civStream) {
+          if (newMsg.id && civStream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
           const hint = civStream.querySelector('.chat-empty-hint');
           if (hint) hint.remove();
           const isSelf = newMsg.senderRole === 'CIVILIAN';
           const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const msgEl = document.createElement('div');
           msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
           msgEl.innerHTML = `
             <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
             <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
@@ -2027,3 +2104,454 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+
+// =========================================================================
+// 8-STAGE DISASTER LOGISTICS & ADMIN MULTI-CHANNEL LOGIC (WEEKS 1, 3, 6, 7, 8)
+// =========================================================================
+
+let currentAdminChannel = 'CHANNEL_1_RESOURCE';
+let activeHitlRecommendation = null;
+
+// --- 1. Resource Manager Inventory Console (Diagram 1, Step 2) ---
+async function loadResourceInventory() {
+  const tableBody = document.getElementById('inventoryTableBody');
+  const countBadge = document.getElementById('inventoryCountBadge');
+  if (!tableBody) return;
+
+  try {
+    const res = await fetch('/api/resources');
+    if (!res.ok) throw new Error('Failed to load resources');
+    const data = await res.json();
+    const { resources, summary } = data;
+
+    // Update Aggregations
+    const sWater = document.getElementById('sumWaterVal');
+    const sFood = document.getElementById('sumFoodVal');
+    const sMeds = document.getElementById('sumMedsVal');
+    const sAmb = document.getElementById('sumAmbVal');
+    const sRescue = document.getElementById('sumRescueVal');
+    const sEquip = document.getElementById('sumEquipVal');
+
+    if (sWater) sWater.textContent = `${summary.waterLitresAvailable.toLocaleString()} L`;
+    if (sFood) sFood.textContent = `${summary.foodRationsAvailable.toLocaleString()} Rations`;
+    if (sMeds) sMeds.textContent = `${summary.medicineKitsAvailable.toLocaleString()} Kits`;
+    if (sAmb) sAmb.textContent = `${summary.ambulancesAvailable} Available`;
+    if (sRescue) sRescue.textContent = `${summary.rescueTeamsAvailable} Teams`;
+    if (sEquip) sEquip.textContent = `${summary.equipmentAvailable} Units`;
+    if (countBadge) countBadge.textContent = `${resources.length} Tracked Resources`;
+
+    tableBody.innerHTML = resources.map(r => {
+      const isLow = r.quantityAvailable <= 5;
+      const catColor = r.category === 'WATER' ? '#38bdf8' :
+                       r.category === 'FOOD' ? '#f59e0b' :
+                       r.category === 'MEDICINE' ? '#ef4444' :
+                       r.category === 'AMBULANCE' ? '#06b6d4' : '#a78bfa';
+
+      return `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 500; color: var(--text-main);">
+            <i class="ph-fill ph-package" style="color: ${catColor}; margin-right: 6px;"></i>
+            ${escapeHtml(r.name)}
+          </td>
+          <td style="padding: 12px;">
+            <span class="badge" style="background: rgba(255,255,255,0.06); color: ${catColor}; font-size: 11px;">
+              ${r.category}
+            </span>
+          </td>
+          <td style="padding: 12px; color: var(--text-secondary);">${escapeHtml(r.depotName || 'Central Depot')}</td>
+          <td style="padding: 12px; font-weight: 600; color: ${isLow ? 'var(--red)' : 'var(--green)'};">
+            ${r.quantityAvailable.toLocaleString()} ${r.unit}
+          </td>
+          <td style="padding: 12px; color: var(--cyan);">${r.quantityAllocated} ${r.unit}</td>
+          <td style="padding: 12px; color: var(--text-dim);">${r.quantityTotal} ${r.unit}</td>
+          <td style="padding: 12px;">
+            <span class="badge ${r.status === 'OPERATIONAL' ? 'badge-success' : 'badge-critical'}">
+              ${r.status}
+            </span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.warn('Error loading resource inventory:', err);
+    tableBody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-dim);">Unable to connect to depot inventory.</td></tr>';
+  }
+}
+
+// Quick Replenish Helper
+window.quickReplenishResource = async (category, amount) => {
+  try {
+    const res = await fetch('/api/resources/replenish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, amount })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showDispatcherPrompt({
+        type: 'ACCEPTED',
+        responderName: 'RESOURCE MANAGER',
+        callsign: category,
+        notes: data.message
+      });
+      loadResourceInventory();
+    }
+  } catch (e) {
+    console.error('Replenish error:', e);
+  }
+};
+
+// --- 2. Incident Manager Console (Diagram 1, Step 3) ---
+async function loadIncidentManagerFeed() {
+  const container = document.getElementById('incidentManagerFeed');
+  const countBadge = document.getElementById('pendingTriageCountBadge');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/incidents');
+    if (!res.ok) throw new Error('Failed to load incidents');
+    const data = await res.json();
+    const activeIncs = data.incidents.filter(i => !['RESOLVED', 'CANCELLED'].includes(i.status));
+
+    if (countBadge) countBadge.textContent = `${activeIncs.length} Active in Triage`;
+
+    container.innerHTML = activeIncs.map(inc => {
+      let needs = {};
+      try {
+        needs = inc.resourceNeeds ? JSON.parse(inc.resourceNeeds) : {};
+      } catch (e) {}
+
+      return `
+        <div class="glass-panel" style="padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <strong style="color: var(--cyan); font-size: 15px;">${inc.incidentNumber}</strong>
+              <span class="badge badge-critical">${inc.severity}</span>
+              <span style="font-size: 12px; color: var(--text-dim);">${inc.type}</span>
+            </div>
+            <button class="btn-dispatch btn-brief" style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid #a78bfa;" onclick="openHumanApprovalModal('${inc.id}')">
+              <i class="ph-fill ph-brain"></i> AI Allocation & Route
+            </button>
+          </div>
+
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">
+            ${escapeHtml(inc.description || 'Emergency assistance requested.')}
+          </p>
+
+          <!-- Structured Resource Breakdown -->
+          <div style="background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px;">
+            <div><strong>Casualties:</strong> <span style="color: var(--red);">${inc.affectedCount} individuals</span></div>
+            <div><strong>Water Needed:</strong> <span style="color: #38bdf8;">${needs.water_litres || 0} L</span></div>
+            <div><strong>Food Rations:</strong> <span style="color: #f59e0b;">${needs.food_rations || 0} Rations</span></div>
+            <div><strong>Trauma Kits:</strong> <span style="color: #ef4444;">${needs.medical_kits || 0} Kits</span></div>
+            <div><strong>Ambulances:</strong> <span style="color: var(--green);">${needs.ambulances ? '1 Required' : 'Standby'}</span></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.warn('Error loading incident manager feed:', err);
+  }
+}
+
+// --- 3. Admin 3-Channel Communication Hub (Diagram 2) ---
+async function loadAdminChannel(channelName) {
+  currentAdminChannel = channelName || 'CHANNEL_1_RESOURCE';
+  const stream = document.getElementById('adminChannelChatStream');
+  const title = document.getElementById('activeAdminChannelTitle');
+  const sub = document.getElementById('activeAdminChannelSub');
+
+  // Update tabs active state
+  document.querySelectorAll('[data-admin-ch]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-admin-ch') === currentAdminChannel);
+  });
+
+  if (currentAdminChannel === 'CHANNEL_1_RESOURCE') {
+    if (title) title.innerHTML = '<i class="ph-fill ph-package" style="color: #38bdf8;"></i> Channel 1: Admin ↔ Resource Manager (Elena Rostova)';
+    if (sub) sub.textContent = 'Relief depot inventory quotas, supply replenishments, and warehouse audits.';
+  } else if (currentAdminChannel === 'CHANNEL_2_INCIDENT') {
+    if (title) title.innerHTML = '<i class="ph-fill ph-clipboard-text" style="color: #a78bfa;"></i> Channel 2: Admin ↔ Incident Manager (Dr. Tariq)';
+    if (sub) sub.textContent = 'Incident severity triage verification, casualty count adjustments, and resource need escalations.';
+  } else {
+    if (title) title.innerHTML = '<i class="ph-fill ph-ambulance" style="color: #f59e0b;"></i> Channel 3: Admin ↔ Field Responders (Carlos Vance)';
+    if (sub) sub.textContent = 'Direct tactical mission orders, route sequence deviations, and field delivery confirmations.';
+  }
+
+  if (socket && socket.connected) {
+    socket.emit('channel:join', { channel: currentAdminChannel });
+  }
+
+  if (stream) {
+    stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">Connecting to channel...</div>';
+    try {
+      const res = await fetch(`/api/chat/channel/${currentAdminChannel}`);
+      if (!res.ok) throw new Error('Failed to load channel messages');
+      const data = await res.json();
+      renderChatStream(stream, data.messages || [], currentUser ? currentUser.name : 'Central Command');
+    } catch (e) {
+      stream.innerHTML = '<div class="chat-empty-hint">Direct topology channel online. Transmit instructions below.</div>';
+    }
+  }
+}
+
+// --- 4. Human-in-the-Loop Allocation Approval Modal (Diagram 1, Step 5 & 6) ---
+window.openHumanApprovalModal = async (incidentDbId) => {
+  const modal = document.getElementById('humanApprovalModal');
+  if (!modal) return;
+
+  try {
+    const res = await fetch('/api/assignments/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ incidentId: incidentDbId })
+    });
+    if (!res.ok) throw new Error('Failed to generate recommendation');
+    const data = await res.json();
+    activeHitlRecommendation = data.recommendation;
+
+    // Populate Incident info
+    document.getElementById('hitlIncidentNum').textContent = activeHitlRecommendation.incidentNumber;
+    document.getElementById('hitlSeverityBadge').textContent = `${activeHitlRecommendation.severity} SEVERITY`;
+    document.getElementById('hitlCasualties').textContent = activeHitlRecommendation.affectedCount;
+    document.getElementById('hitlDescription').textContent = activeHitlRecommendation.rationale;
+
+    const scoreEl = document.getElementById('hitlScoreBadge');
+    if (scoreEl) scoreEl.textContent = `${activeHitlRecommendation.recommendationScore} (Optimal)`;
+
+    const algoEl = document.getElementById('hitlAlgorithmBadge');
+    if (algoEl) algoEl.textContent = activeHitlRecommendation.algorithm || 'Hungarian + ILP + Random Forest';
+
+    // Populate Matched Supplies with EDITABLE quantity inputs (Admin modification power)
+    const suppliesList = document.getElementById('hitlSuppliesList');
+    if (suppliesList) {
+      suppliesList.innerHTML = activeHitlRecommendation.allocatedSupplies.map((item, idx) => `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px 12px;">
+          <div>
+            <strong style="font-size: 13px; color: var(--text-main);">${escapeHtml(item.name)}</strong>
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">From: ${escapeHtml(item.depotName || 'Central Depot')}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <label style="font-size: 11px; color: var(--text-dim);">Allocated Qty:</label>
+            <input type="number" id="hitl_qty_${idx}" class="input-styled" style="width: 80px; text-align: center; padding: 4px;" value="${item.qty}" min="1" />
+            <span style="font-size: 12px; color: var(--cyan);">${item.unit}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Populate Responder Select
+    const respSelect = document.getElementById('hitlResponderSelect');
+    if (respSelect) {
+      respSelect.innerHTML = activeHitlRecommendation.availableResponders.map(r => `
+        <option value="${r.id}" ${r.id === activeHitlRecommendation.recommendedResponder?.id ? 'selected' : ''}>
+          ${r.callsign} — ${r.name} (${r.type.replace('_', ' ')})
+        </option>
+      `).join('');
+    }
+
+    // Populate Sequential Stops
+    const stopsList = document.getElementById('hitlStopsList');
+    if (stopsList) {
+      stopsList.innerHTML = activeHitlRecommendation.stopSequence.map(s => `
+        <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.25); border-left: 3px solid var(--cyan); padding: 8px 12px; border-radius: 4px;">
+          <div style="background: var(--cyan); color: #080a11; font-weight: 700; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px;">
+            ${s.stopNumber}
+          </div>
+          <div style="flex: 1;">
+            <strong style="font-size: 12px; color: var(--text-main);">${escapeHtml(s.name)}</strong>
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">${escapeHtml(s.itemsToLoad || s.itemsToDeliver || s.notes || '')}</span>
+          </div>
+          <span class="badge" style="font-size: 10px;">${s.type}</span>
+        </div>
+      `).join('');
+    }
+
+    modal.style.display = 'flex';
+  } catch (err) {
+    alert(`AI Allocation Engine: ${err.message}`);
+  }
+};
+
+// Admin Approves Mission (Diagram 1, Step 5 & 6)
+async function approveHitlMission() {
+  if (!activeHitlRecommendation) return;
+
+  const btn = document.getElementById('hitlApproveBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Dispatching Mission...';
+  }
+
+  try {
+    // Read potentially modified supply quantities
+    const modifiedSupplies = activeHitlRecommendation.allocatedSupplies.map((item, idx) => {
+      const inputEl = document.getElementById(`hitl_qty_${idx}`);
+      const modifiedQty = inputEl ? parseInt(inputEl.value, 10) : item.qty;
+      return { ...item, qty: modifiedQty || item.qty };
+    });
+
+    const chosenResponderId = document.getElementById('hitlResponderSelect')?.value || activeHitlRecommendation.recommendedResponder?.id;
+
+    const res = await fetch('/api/assignments/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incidentId: activeHitlRecommendation.incidentId,
+        responderId: chosenResponderId,
+        allocatedSupplies: modifiedSupplies,
+        stopSequence: activeHitlRecommendation.stopSequence,
+        notes: 'Mission approved by Admin via Human-in-the-Loop interface.'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to approve mission.');
+
+    document.getElementById('humanApprovalModal').style.display = 'none';
+
+    showDispatcherPrompt({
+      type: 'DISPATCHED',
+      responderName: 'ADMIN DISPATCH',
+      callsign: activeHitlRecommendation.incidentNumber,
+      notes: `Mission approved with ${modifiedSupplies.length} supply items & 3-stop route.`
+    });
+
+    await loadBackendData();
+    if (document.getElementById('resourceManagerView')?.style.display === 'grid') {
+      loadResourceInventory();
+    }
+  } catch (err) {
+    alert(`Approval error: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ph-fill ph-check-circle"></i> Approve & Dispatch Mission';
+    }
+  }
+}
+
+// Admin Rejects Recommendation
+async function rejectHitlMission() {
+  if (!activeHitlRecommendation) return;
+  const reason = prompt('Please enter reason for rejecting AI allocation recommendation:', 'Alternative logistics strategy required / Scene hazards');
+  if (!reason) return;
+
+  document.getElementById('humanApprovalModal').style.display = 'none';
+  showDispatcherPrompt({
+    type: 'DECLINED',
+    responderName: 'ADMIN REVIEW',
+    callsign: activeHitlRecommendation.incidentNumber,
+    notes: `Allocation rejected: ${reason}`
+  });
+}
+
+// --- 5. Responder Application Delivery Confirmation & Reallocation Triggers (Diagram 1, Step 7 & 8) ---
+window.confirmDeliveryAtStop = async (assignmentId, stopNumber) => {
+  const recipient = prompt('Enter recipient/on-scene contact name for delivery verification:', 'Officer In-Charge');
+  if (!recipient) return;
+
+  try {
+    const res = await fetch(`/api/assignments/${assignmentId}/stops/${stopNumber}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientName: recipient, notes: 'Handover verified and signed' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`Delivery confirmed at Checkpoint ${stopNumber}! Relief inventory updated.`);
+      setupResponderView();
+    } else {
+      alert(`Error confirming delivery: ${data.error}`);
+    }
+  } catch (e) {
+    alert(`Delivery confirmation error: ${e.message}`);
+  }
+};
+
+window.triggerMissionReallocation = async (assignmentId) => {
+  const reason = prompt('Select Disruption Reason for Dynamic Reallocation (VEHICLE_BREAKDOWN / SUPPLY_SHORTAGE / SCENE_ESCALATION):', 'VEHICLE_BREAKDOWN');
+  if (!reason) return;
+
+  try {
+    const res = await fetch(`/api/assignments/${assignmentId}/reallocate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.toUpperCase(), notes: 'Field unit reported disruption' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Dynamic Reallocation Triggered! Incident returned to triage queue for alternate matching.');
+      setupResponderView();
+      loadBackendData();
+    }
+  } catch (e) {
+    alert(`Reallocation trigger error: ${e.message}`);
+  }
+};
+
+// --- Bind Navigation & Modal Handlers for New Views ---
+function bindNewArchitectureHandlers() {
+  // Sidebar navigation
+  document.getElementById('navResourceManager')?.addEventListener('click', () => switchView('resourceManager'));
+  document.getElementById('navIncidentManager')?.addEventListener('click', () => switchView('incidentManager'));
+  document.getElementById('navAdminChannels')?.addEventListener('click', () => switchView('adminChannels'));
+
+  // Quick replenish buttons
+  document.getElementById('quickReplenishWaterBtn')?.addEventListener('click', () => quickReplenishResource('WATER', 200));
+  document.getElementById('quickReplenishFoodBtn')?.addEventListener('click', () => quickReplenishResource('FOOD', 50));
+  document.getElementById('quickReplenishMedsBtn')?.addEventListener('click', () => quickReplenishResource('MEDICINE', 10));
+
+  // Admin channel tabs
+  document.getElementById('btnAdminCh1')?.addEventListener('click', () => loadAdminChannel('CHANNEL_1_RESOURCE'));
+  document.getElementById('btnAdminCh2')?.addEventListener('click', () => loadAdminChannel('CHANNEL_2_INCIDENT'));
+  document.getElementById('btnAdminCh3')?.addEventListener('click', () => loadAdminChannel('CHANNEL_3_RESPONDER'));
+
+  // Admin channel message form
+  const admForm = document.getElementById('adminChannelChatForm');
+  if (admForm) {
+    admForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('adminChannelChatInput');
+      const text = input?.value.trim();
+      if (!text) return;
+      input.value = '';
+
+      if (socket && socket.connected) {
+        socket.emit('channel:send', {
+          channel: currentAdminChannel,
+          message: text,
+          senderName: currentUser ? currentUser.name : 'Central Command',
+          senderRole: currentUser ? currentUser.role : 'ADMIN'
+        });
+      } else {
+        await fetch(`/api/chat/channel/${currentAdminChannel}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            senderName: currentUser ? currentUser.name : 'Central Command',
+            senderRole: currentUser ? currentUser.role : 'ADMIN'
+          })
+        });
+      }
+      setTimeout(() => loadAdminChannel(currentAdminChannel), 150);
+    };
+  }
+
+  // Human approval modal actions
+  document.getElementById('hitlApproveBtn')?.addEventListener('click', approveHitlMission);
+  document.getElementById('hitlRejectBtn')?.addEventListener('click', rejectHitlMission);
+  document.getElementById('closeHumanApprovalModalBtn')?.addEventListener('click', () => {
+    document.getElementById('humanApprovalModal').style.display = 'none';
+  });
+}
+
+// Call binding once DOM is ready
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindNewArchitectureHandlers);
+  } else {
+    bindNewArchitectureHandlers();
+  }
+}

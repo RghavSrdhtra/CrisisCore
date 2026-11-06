@@ -11,15 +11,15 @@ datasource db {
 }
 
 // User Model with Multi-Tier Role Privilege
-// Roles: CIVILIAN, RESPONDER, COORDINATOR, ADMIN
+// Roles: CIVILIAN, RESPONDER, COORDINATOR, ADMIN, RESOURCE_MANAGER, INCIDENT_MANAGER
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
   name         String
-  role         String   @default("CIVILIAN") // CIVILIAN | RESPONDER | COORDINATOR | ADMIN
+  role         String   @default("CIVILIAN") // CIVILIAN | RESPONDER | COORDINATOR | ADMIN | RESOURCE_MANAGER | INCIDENT_MANAGER
   phone        String?
-  agency       String?  // e.g. "Metro Fire Service", "Emergency Medical Corp", "Police Dept"
+  agency       String?  // e.g. "Metro Fire Service", "Emergency Medical Corp", "Police Dept", "Logistics Command"
   badgeNumber  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -44,7 +44,11 @@ model Incident {
   // Predictive ML attributes (Section 4.2)
   predictedPriority     String?   // LOW | MEDIUM | HIGH | CRITICAL
   priorityConfidence    Float?    // 0.0 to 1.0 confidence score
-  manualPriority        String?   // Coordinator override priority
+  manualPriority        String?   // Coordinator/Admin override priority
+  
+  // Structured Resource Needs (Diagram 1 - Incident Manager)
+  resourceNeeds         String?   // JSON-encoded object: e.g. {"water_litres": 200, "food_rations": 50, "medical_kits": 5, "ambulances": 1, "rescue_teams": 1}
+  managerNotes          String?   // Incident manager verification notes
   
   // Geospatial & Privacy attributes (Section 4.1, 4.6, 4.11)
   lat                   Float
@@ -69,7 +73,7 @@ model Incident {
 // Responder Model representing emergency units & field personnel
 model Responder {
   id                String    @id @default(uuid())
-  callsign          String    @unique // e.g. "MEDIC-04", "FIRE-ENGINE-02"
+  callsign          String    @unique // e.g. "MEDIC-01", "FIRE-ENGINE-02", "RESCUE-ALPHA"
   name              String
   type              String    // FIRE_RESCUE | MEDICAL_AMBULANCE | POLICE_SECURITY | DISASTER_PERSONNEL | SPECIALIZED_EQUIPMENT
   capability        String    // CSV or description of capabilities
@@ -90,26 +94,40 @@ model Responder {
   locationLogs      LocationLog[]
 }
 
-// Physical or specialized emergency resources assigned to responders
+// Physical inventory & relief supplies managed by Resource Manager (Diagram 1)
+// Covers: Ambulances, rescue teams, food, water, medicine, equipment
 model Resource {
   id                  String     @id @default(uuid())
-  name                String     // e.g. "Advanced Life Support Unit", "Hydraulic Rescue Cutter"
-  type                String     // VEHICLE | MEDICAL_KIT | HEAVY_EQUIPMENT | DRONE | WATER_PUMP
-  status              String     @default("OPERATIONAL") // OPERATIONAL | IN_USE | MAINTENANCE
+  name                String     // e.g. "Clean Drinking Water", "Trauma First-Aid Kit", "Ambulance ALS Unit"
+  category            String     @default("EQUIPMENT") // AMBULANCE | RESCUE_TEAM | FOOD | WATER | MEDICINE | EQUIPMENT
+  type                String     // VEHICLE | CONSUMABLE | RELIEF_SUPPLY | KIT | TOOL
+  status              String     @default("OPERATIONAL") // OPERATIONAL | IN_USE | LOW_STOCK | MAINTENANCE
+  
+  // Quantitative Inventory Tracking
+  quantityTotal       Int        @default(1)
+  quantityAvailable   Int        @default(1)
+  quantityAllocated   Int        @default(0)
+  unit                String     @default("UNITS") // LITRES | RATIONS | KITS | VEHICLES | PERSONNEL
+  
+  // Supply Depot / Staging Area Geolocation
+  depotName           String?    @default("Central Logistics Depot")
+  depotLat            Float?
+  depotLng            Float?
+
   assignedResponderId String?
   assignedResponder   Responder? @relation(fields: [assignedResponderId], references: [id], onDelete: SetNull)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 }
 
-// Assignment Model linking Incidents to Responders via Optimization / Coordinator Dispatch
+// Assignment & Mission Model linking Incidents, Responders, Stop Sequences & Admin Approvals
 model Assignment {
   id                      String    @id @default(uuid())
   incidentId              String
   incident                Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   responderId             String
   responder               Responder @relation(fields: [responderId], references: [id], onDelete: Cascade)
-  status                  String    @default("RECOMMENDED") // RECOMMENDED | DISPATCHED | ACKNOWLEDGED | EN_ROUTE | ON_SCENE | COMPLETED | CANCELLED
+  status                  String    @default("RECOMMENDED") // RECOMMENDED | APPROVED | DISPATCHED | ACKNOWLEDGED | EN_ROUTE | ON_SCENE | COMPLETED | CANCELLED
   
   assignedByCoordinatorId String?
   assignedByCoordinator   User?     @relation("CoordinatorAssignments", fields: [assignedByCoordinatorId], references: [id], onDelete: SetNull)
@@ -120,6 +138,22 @@ model Assignment {
   completedAt             DateTime?
   declineReason           String?   // Reason provided if respondent declines assignment
   notes                   String?
+
+  // Human-in-the-Loop Admin Approval (Diagram 1, Step 5 & 6)
+  adminApprovalStatus     String    @default("PENDING") // PENDING | APPROVED | REJECTED | MODIFIED
+  approvedByAdminId       String?
+  allocatedSupplies       String?   // JSON snapshot of supplies allocated: e.g. [{"resourceId": "...", "name": "Water", "qty": 50}]
+
+  // Mission Details & Sequential Stop Progression (Diagram 1, Step 7)
+  stopSequence            String?   // JSON array of stops: [{"stopNumber": 1, "type": "DEPOT_PICKUP", "name": "...", "lat": ..., "lng": ..., "status": "COMPLETED"}, ...]
+  deliveryStatus          String    @default("PENDING") // PENDING | IN_TRANSIT | DELIVERED | VERIFIED
+  deliveryConfirmedAt     DateTime?
+  deliveryRecipient       String?
+  deliveryNotes           String?
+
+  // Dynamic Reallocation Triggers (Diagram 1, Step 8)
+  reallocationTriggered   Boolean   @default(false)
+  reallocationReason      String?
 }
 
 // Privacy-Aware Location Tracking Log (Subject to 48h Retention Policy - Section 4.11)
@@ -142,23 +176,23 @@ model AuditLog {
   id           String   @id @default(uuid())
   userId       String?
   user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action       String   // DISPATCH_OVERRIDE | STATUS_CHANGE | LOCATION_ACCESSED | USER_LOGIN | PRIVACY_PURGE
-  resourceType String   // INCIDENT | ASSIGNMENT | RESPONDER | USER
+  action       String   // DISPATCH_OVERRIDE | STATUS_CHANGE | LOCATION_ACCESSED | USER_LOGIN | PRIVACY_PURGE | ADMIN_APPROVAL | REALLOCATION_TRIGGER
+  resourceType String   // INCIDENT | ASSIGNMENT | RESPONDER | USER | RESOURCE
   resourceId   String?
   details      String?  // JSON context or description
   ipAddress    String?
   timestamp    DateTime @default(now())
 }
 
-// Real-Time Communication Messages across Ops and Civilian Channels
+// Real-Time Communication Messages across Admin 3-Channels and Civilian Line (Diagram 2)
 model ChatMessage {
   id         String   @id @default(uuid())
-  incidentId String
-  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
-  channel    String   // "OPS" (Admin/Coordinator <-> Respondent) or "CIVILIAN" (Respondent <-> Civilian)
+  incidentId String?
+  incident   Incident? @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  channel    String   // "CHANNEL_1_RESOURCE" | "CHANNEL_2_INCIDENT" | "CHANNEL_3_RESPONDER" | "CIVILIAN" | "OPS"
   senderId   String?
   senderName String
-  senderRole String   // "ADMIN" | "COORDINATOR" | "RESPONDER" | "CIVILIAN"
+  senderRole String   // "ADMIN" | "RESOURCE_MANAGER" | "INCIDENT_MANAGER" | "COORDINATOR" | "RESPONDER" | "CIVILIAN"
   message    String
   createdAt  DateTime @default(now())
 }

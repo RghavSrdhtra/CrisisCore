@@ -3,6 +3,7 @@
   "appName": "CrisisCore",
   "webDir": "dist",
   "server": {
+    "androidScheme": "http",
     "cleartext": true
   }
 }

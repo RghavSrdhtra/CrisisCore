@@ -8,6 +8,7 @@ import incidentsRoutes from './routes/incidents.routes.js';
 import respondersRoutes from './routes/responders.routes.js';
 import assignmentsRoutes from './routes/assignments.routes.js';
 import chatRoutes from './routes/chat.routes.js';
+import resourcesRoutes from './routes/resources.routes.js';
 import { initializeWebSocket } from './ws/socketHandler.js';
 import { prisma } from './config/db.js';
 
@@ -71,6 +72,7 @@ app.use('/api/incidents', incidentsRoutes);
 app.use('/api/responders', respondersRoutes);
 app.use('/api/assignments', assignmentsRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/resources', resourcesRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

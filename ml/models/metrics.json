@@ -1,0 +1,69 @@
+{
+  "selected_model": "RandomForestClassifier",
+  "test_accuracy": 1.0,
+  "test_f1_macro": 1.0,
+  "benchmark_comparison": {
+    "RandomForest": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "training_time_sec": 0.322
+    },
+    "GradientBoosting": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "training_time_sec": 3.654
+    },
+    "LogisticRegression": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "training_time_sec": 0.158
+    }
+  },
+  "classification_report": {
+    "CRITICAL": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 144.0
+    },
+    "HIGH": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 246.0
+    },
+    "LOW": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 108.0
+    },
+    "MEDIUM": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 202.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 700.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 700.0
+    }
+  },
+  "training_samples": 3500,
+  "classes": [
+    "CRITICAL",
+    "HIGH",
+    "LOW",
+    "MEDIUM"
+  ],
+  "trained_at": "2026-11-06T07:53:08Z"
+}

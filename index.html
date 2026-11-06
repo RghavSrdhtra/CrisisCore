@@ -46,6 +46,15 @@
         <button type="button" class="nav-item active" id="navCommandCenter" title="Central Command Dispatch Dashboard">
           <i class="ph ph-squares-four"></i> Command Center
         </button>
+        <button type="button" class="nav-item" id="navResourceManager" style="color: #38bdf8;" title="Resource Inventory Manager (Diagram 1, Step 2)">
+          <i class="ph-fill ph-package"></i> Resource Inventory
+        </button>
+        <button type="button" class="nav-item" id="navIncidentManager" style="color: #a78bfa;" title="Incident Needs & Triage (Diagram 1, Step 3)">
+          <i class="ph-fill ph-clipboard-text"></i> Incident Needs
+        </button>
+        <button type="button" class="nav-item" id="navAdminChannels" style="color: #34d399;" title="Admin 3-Channel Communications (Diagram 2)">
+          <i class="ph-fill ph-broadcast"></i> Admin Comms (3-Ch)
+        </button>
         <button type="button" class="nav-item" id="navSOSPortal" style="color: #ff7b72;" title="Civilian Emergency SOS Portal (In-App)">
           <i class="ph-fill ph-phone-call"></i> SOS Portal (In-App)
         </button>
@@ -396,6 +405,35 @@
                 <textarea id="sosDescription" class="input-styled" rows="3" placeholder="Briefly describe what happened, trapped victims, hazards..."></textarea>
               </div>
 
+              <!-- Structured Resource Needs (Diagram 1, Step 3 - Incident Manager) -->
+              <div class="form-group" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 14px;">
+                <label style="font-weight: 600; color: var(--cyan); margin-bottom: 8px; display: block;">
+                  <i class="ph-fill ph-hand-heart"></i> Specific Emergency Resource Needs
+                </label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; font-size: 13px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="needWater" checked />
+                    <span>Drinking Water (5L Packs)</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="needFood" checked />
+                    <span>Emergency Food Rations</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="needMedicine" checked />
+                    <span>Trauma First-Aid Kits</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="needAmbulance" checked />
+                    <span>Ambulance ALS Transport</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="needRescueTeam" />
+                    <span>Urban Rescue Personnel</span>
+                  </label>
+                </div>
+              </div>
+
               <!-- Voluntary Location Toggle (Section 4.11) -->
               <div class="privacy-location-card">
                 <div class="privacy-toggle-row">
@@ -460,6 +498,199 @@
               <p style="margin-top: 8px;">• Follow instructions provided by arriving first responders.</p>
             </div>
           </section>
+        </div>
+      </div>
+
+      <!-- Resource Manager Inventory View (Diagram 1, Step 2) -->
+      <div id="resourceManagerView" class="dashboard-grid" style="display: none; grid-template-columns: 1fr;">
+        <div class="col-main" style="width: 100%;">
+          <!-- Resource Metrics Banner -->
+          <div class="glass-panel" style="margin-bottom: 20px; padding: 18px 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 style="font-size: 20px; display: flex; align-items: center; gap: 8px; color: var(--cyan);">
+                  <i class="ph-fill ph-package"></i> Resource Manager — Central Inventory Console
+                </h2>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                  Real-time stock management across regional depots: Ambulances, Rescue Teams, Food, Water, Medicine, and Equipment.
+                </p>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-reg-unit" id="quickReplenishWaterBtn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8;">
+                  <i class="ph-fill ph-drop"></i> +200L Water
+                </button>
+                <button class="btn-reg-unit" id="quickReplenishFoodBtn" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b;">
+                  <i class="ph-fill ph-bowl-food"></i> +50 Food Rations
+                </button>
+                <button class="btn-reg-unit" id="quickReplenishMedsBtn" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444;">
+                  <i class="ph-fill ph-first-aid"></i> +10 Trauma Kits
+                </button>
+              </div>
+            </div>
+
+            <!-- Resource Aggregations Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 18px;" id="resourceSummaryCards">
+              <div class="metric-card metric-blue">
+                <div class="metric-info">
+                  <h4>Drinking Water</h4>
+                  <div class="value" id="sumWaterVal">2,600 L</div>
+                </div>
+              </div>
+              <div class="metric-card metric-green">
+                <div class="metric-info">
+                  <h4>Food Rations</h4>
+                  <div class="value" id="sumFoodVal">850 Rations</div>
+                </div>
+              </div>
+              <div class="metric-card metric-red">
+                <div class="metric-info">
+                  <h4>Trauma Medicine</h4>
+                  <div class="value" id="sumMedsVal">95 Kits</div>
+                </div>
+              </div>
+              <div class="metric-card metric-blue">
+                <div class="metric-info">
+                  <h4>Ambulances</h4>
+                  <div class="value" id="sumAmbVal">4 Available</div>
+                </div>
+              </div>
+              <div class="metric-card metric-green">
+                <div class="metric-info">
+                  <h4>Rescue Teams</h4>
+                  <div class="value" id="sumRescueVal">3 Teams</div>
+                </div>
+              </div>
+              <div class="metric-card metric-red">
+                <div class="metric-info">
+                  <h4>Equipment Units</h4>
+                  <div class="value" id="sumEquipVal">20 Units</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inventory Table Panel -->
+          <div class="glass-panel" style="padding: 20px;">
+            <div class="panel-header" style="margin-bottom: 16px;">
+              <h2><i class="ph ph-warehouse"></i> Depot Inventory Ledger</h2>
+              <span class="badge" id="inventoryCountBadge">Loading stocks...</span>
+            </div>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;" id="resourceInventoryTable">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-dim);">
+                    <th style="padding: 10px 12px;">Resource Name</th>
+                    <th style="padding: 10px 12px;">Category</th>
+                    <th style="padding: 10px 12px;">Depot Location</th>
+                    <th style="padding: 10px 12px;">Available Stock</th>
+                    <th style="padding: 10px 12px;">Allocated</th>
+                    <th style="padding: 10px 12px;">Total</th>
+                    <th style="padding: 10px 12px;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="inventoryTableBody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Incident Manager View (Diagram 1, Step 3) -->
+      <div id="incidentManagerView" class="dashboard-grid" style="display: none; grid-template-columns: 1fr;">
+        <div class="col-main" style="width: 100%;">
+          <div class="glass-panel" style="margin-bottom: 20px; padding: 18px 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 style="font-size: 20px; display: flex; align-items: center; gap: 8px; color: #a78bfa;">
+                  <i class="ph-fill ph-clipboard-text"></i> Incident Manager — Triage & Resource Needs Console
+                </h2>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                  Verify reported casualties, assess situational hazards, and specify structured resource requirements.
+                </p>
+              </div>
+              <span class="badge badge-critical" id="pendingTriageCountBadge">0 Pending Triage</span>
+            </div>
+          </div>
+
+          <div class="glass-panel" style="padding: 20px;">
+            <div class="panel-header" style="margin-bottom: 16px;">
+              <h2><i class="ph ph-list-dashes"></i> Active Incidents & Resource Requisitions</h2>
+            </div>
+            <div id="incidentManagerFeed" style="display: flex; flex-direction: column; gap: 12px;">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin 3-Channel Communication Hub (Diagram 2) -->
+      <div id="adminChannelsView" class="dashboard-grid" style="display: none; grid-template-columns: 320px 1fr;">
+        <div class="col-side" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="glass-panel" style="padding: 16px;">
+            <h3 style="font-size: 16px; margin-bottom: 6px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+              <i class="ph-fill ph-broadcast" style="color: #34d399;"></i> Admin Multi-Channel Comms
+            </h3>
+            <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 14px;">
+              Dedicated topology channels per architectural specification.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button class="chat-tab-btn active" id="btnAdminCh1" data-admin-ch="CHANNEL_1_RESOURCE" style="width: 100%; text-align: left; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); display: flex; align-items: center; gap: 10px;">
+                <i class="ph-fill ph-package" style="font-size: 20px; color: #38bdf8;"></i>
+                <div>
+                  <strong style="display: block; font-size: 13px; color: var(--text-main);">Channel 1: Resource Mgr</strong>
+                  <span style="font-size: 11px; color: var(--text-dim);">Elena Rostova • Supply Depots</span>
+                </div>
+              </button>
+
+              <button class="chat-tab-btn" id="btnAdminCh2" data-admin-ch="CHANNEL_2_INCIDENT" style="width: 100%; text-align: left; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); display: flex; align-items: center; gap: 10px;">
+                <i class="ph-fill ph-clipboard-text" style="font-size: 20px; color: #a78bfa;"></i>
+                <div>
+                  <strong style="display: block; font-size: 13px; color: var(--text-main);">Channel 2: Incident Mgr</strong>
+                  <span style="font-size: 11px; color: var(--text-dim);">Dr. Tariq • Triage & Needs</span>
+                </div>
+              </button>
+
+              <button class="chat-tab-btn" id="btnAdminCh3" data-admin-ch="CHANNEL_3_RESPONDER" style="width: 100%; text-align: left; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); display: flex; align-items: center; gap: 10px;">
+                <i class="ph-fill ph-ambulance" style="font-size: 20px; color: #f59e0b;"></i>
+                <div>
+                  <strong style="display: block; font-size: 13px; color: var(--text-main);">Channel 3: Responders</strong>
+                  <span style="font-size: 11px; color: var(--text-dim);">Carlos Vance • Field Missions</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-main" style="display: flex; flex-direction: column;">
+          <div class="glass-panel" style="flex: 1; display: flex; flex-direction: column; height: calc(100vh - 120px);">
+            <div class="panel-header" style="border-bottom: 1px solid var(--border-color); padding: 14px 20px;">
+              <div>
+                <h2 id="activeAdminChannelTitle" style="font-size: 16px; color: var(--cyan);">
+                  <i class="ph-fill ph-chats-circle"></i> Channel 1: Admin ↔ Resource Manager
+                </h2>
+                <p id="activeAdminChannelSub" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                  Supply quotas, depot inventory replenishments, and logistics audit orders.
+                </p>
+              </div>
+              <span class="badge badge-success">LIVE ENCRYPTED</span>
+            </div>
+
+            <div class="chat-stream" id="adminChannelChatStream" style="flex: 1; padding: 20px; overflow-y: auto;">
+              <!-- Messages injected via JS -->
+            </div>
+
+            <form id="adminChannelChatForm" class="chat-input-form" style="padding: 14px 20px; border-top: 1px solid var(--border-color); display: flex; gap: 10px;">
+              <input type="text" id="adminChannelChatInput" class="chat-input" placeholder="Transmit direct channel message..." autocomplete="off" style="flex: 1;" />
+              <button type="submit" class="chat-send-btn" style="background: var(--cyan); color: #080a11; border: none; padding: 0 18px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600;">
+                <i class="ph-fill ph-paper-plane-right"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
         </div>
       </div>
     </main>
@@ -911,6 +1142,80 @@
             <i class="ph ph-arrow-right"></i>
           </button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Human-in-the-Loop Allocation Approval Modal (Diagram 1, Step 5 & 6) -->
+  <div class="auth-modal-backdrop" id="humanApprovalModal" style="display: none;">
+    <div class="auth-modal" style="width: 680px; max-height: 90vh; overflow-y: auto;">
+      <div class="auth-modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+        <div class="auth-modal-title">
+          <i class="ph-fill ph-brain" style="color: var(--cyan); font-size: 24px;"></i>
+          <div>
+            <h3 style="font-size: 18px; color: var(--text-main);">AI Resource Allocation Recommendation</h3>
+            <p style="font-size: 12px; color: var(--text-dim);">Human-in-the-Loop Review: Admin can modify allocations, edit stops, and approve or reject.</p>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeHumanApprovalModalBtn"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="auth-modal-body" style="padding-top: 16px;">
+        <!-- Incident Context -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong id="hitlIncidentNum" style="color: var(--cyan); font-size: 15px;">INC-2026-001</strong>
+            <span class="badge badge-critical" id="hitlSeverityBadge">CRITICAL SEVERITY</span>
+          </div>
+          <p id="hitlDescription" style="font-size: 13px; color: var(--text-secondary); margin-top: 6px;">
+            Loading incident situation details...
+          </p>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+            <span>Casualties Reported: <strong id="hitlCasualties" style="color: var(--text-main);">8</strong></span>
+            <span>Optimization Score: <strong id="hitlScoreBadge" style="color: var(--green);">0.94 (Optimal)</strong></span>
+            <span>Engine: <span id="hitlAlgorithmBadge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 10px;">Hungarian + ILP + Random Forest</span></span>
+          </div>
+        </div>
+
+        <!-- 1. Matched Relief Supplies (Editable by Admin) -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 14px; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <i class="ph-fill ph-package" style="color: #38bdf8;"></i> Matched Depot Supplies (Modify Quantities):
+          </h4>
+          <div id="hitlSuppliesList" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- 2. Assigned Field Responder Unit (Selectable) -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 14px; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <i class="ph-fill ph-ambulance" style="color: #f59e0b;"></i> Assigned Field Responder Unit:
+          </h4>
+          <select id="hitlResponderSelect" class="input-styled" style="width: 100%;">
+            <!-- Rendered via JS -->
+          </select>
+        </div>
+
+        <!-- 3. Generated Sequential Stop Sequence (Route Planning) -->
+        <div style="margin-bottom: 20px;">
+          <h4 style="font-size: 14px; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <i class="ph-fill ph-navigation-arrow" style="color: #34d399;"></i> Multi-Stop Route Itinerary (Stop Sequence):
+          </h4>
+          <div id="hitlStopsList" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid var(--border-color); padding-top: 14px;">
+          <button type="button" class="btn-cancel-sos" id="hitlRejectBtn" style="padding: 10px 18px; border-radius: var(--radius-sm); border: 1px solid var(--red); background: rgba(229,83,75,0.1); color: var(--red); font-weight: 600; cursor: pointer;">
+            <i class="ph ph-x-circle"></i> Reject Recommendation
+          </button>
+          <button type="button" id="hitlApproveBtn" style="padding: 10px 22px; border-radius: var(--radius-sm); border: none; background: var(--green); color: #080a11; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <i class="ph-fill ph-check-circle"></i> Approve & Dispatch Mission
+          </button>
+        </div>
       </div>
     </div>
   </div>

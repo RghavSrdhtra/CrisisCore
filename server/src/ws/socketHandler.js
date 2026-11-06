@@ -63,8 +63,6 @@ export function initializeWebSocket(io) {
 
         const room = `chat:${normalizedChannel}:${incidentId}`;
         io.to(room).emit('chat:message', savedMessage);
-        // Also emit globally so multi-view tabs and non-room sockets immediately synchronize
-        io.emit('chat:message', savedMessage);
 
         // Notify coordinator dashboard if sent on OPS channel
         if (normalizedChannel === 'OPS') {
@@ -96,6 +94,38 @@ export function initializeWebSocket(io) {
       }
     });
 
+    
+    // 5. Admin 3-Channel Communication Rooms (Diagram 2)
+    // channels: CHANNEL_1_RESOURCE, CHANNEL_2_INCIDENT, CHANNEL_3_RESPONDER
+    socket.on('channel:join', ({ channel }) => {
+      if (!channel) return;
+      const room = `channel:${channel.toUpperCase()}`;
+      socket.join(room);
+      console.log(`💬 Socket ${socket.id} joined admin channel '${room}'`);
+      socket.emit('channel:joined', { room, channel: channel.toUpperCase() });
+    });
+
+    socket.on('channel:send', async ({ channel, message, senderName, senderRole, senderId }) => {
+      if (!channel || !message || !message.trim()) return;
+      const normChannel = channel.toUpperCase();
+      try {
+        const saved = await prisma.chatMessage.create({
+          data: {
+            channel: normChannel,
+            senderId: senderId || null,
+            senderName: senderName || 'Central Command',
+            senderRole: senderRole || 'ADMIN',
+            message: message.trim()
+          }
+        });
+        const room = `channel:${normChannel}`;
+        io.to(room).emit('channel:message', saved);
+        io.to('coordinators').emit('channel:message', saved);
+      } catch (e) {
+        console.error('Channel send error:', e);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`❌ Client disconnected: ${socket.id}`);
     });
@@ -106,18 +136,16 @@ export function initializeWebSocket(io) {
 
 // Broadcasting helper methods for use in REST controllers
 export const wsBroadcaster = {
-  // Broadcast new incident to all dashboards and coordinators room
+  // Broadcast new incident to all dashboards
   notifyNewIncident: (io, incident) => {
     if (!io) return;
     io.emit('incident:new', incident);
-    io.to('coordinators').emit('incident:new', incident);
   },
 
   // Notify coordinators and civilian of incident update
   notifyIncidentUpdated: (io, incident) => {
     if (!io) return;
     io.emit('incident:updated', incident);
-    io.to('coordinators').emit('incident:updated', incident);
     io.to(`incident:${incident.id}`).emit('incident:updated', {
       id: incident.id,
       status: incident.status,
@@ -130,7 +158,6 @@ export const wsBroadcaster = {
   notifyNewAssignment: (io, assignment) => {
     if (!io) return;
     io.emit('assignment:new', assignment);
-    io.to('coordinators').emit('assignment:new', assignment);
     io.to(`responder:${assignment.responderId}`).emit('assignment:new', assignment);
     // Also notify civilian their incident has been dispatched
     const statusPayload = {
@@ -141,7 +168,6 @@ export const wsBroadcaster = {
       responderCallsign: assignment.responder?.callsign,
       responderType: assignment.responder?.type
     };
-    io.emit('incident:status', statusPayload);
     io.to(`incident:${assignment.incidentId}`).emit('incident:status', statusPayload);
   },
 

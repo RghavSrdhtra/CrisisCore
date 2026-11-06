@@ -536,13 +536,6 @@ function connectSocketIO() {
         renderCivilianChatMessage(newMsg);
       }
     });
-
-    socket.on('chat:civilian_update', (data) => {
-      if (activeIncident && data.incidentId === activeIncident.id && data.message) {
-        renderCivilianChatMessage(data.message);
-      }
-    });
-
   } catch (err) {
     console.warn('Socket.IO initialization error:', err);
   }

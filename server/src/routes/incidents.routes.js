@@ -3,6 +3,7 @@ import { prisma } from '../config/db.js';
 import { authenticate, optionalAuthenticate, requireRoles } from '../middleware/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { wsBroadcaster } from '../ws/socketHandler.js';
+import { mlClient } from '../services/mlClient.js';
 
 const router = express.Router();
 
@@ -64,7 +65,8 @@ router.post('/', optionalAuthenticate, async (req, res) => {
       reporterContact,
       locationSharingActive = true,
       source = 'GPS',
-      accuracy = 5.0
+      accuracy = 5.0,
+      resourceNeeds = null
     } = req.body;
 
     if (!type || lat === undefined || lng === undefined) {
@@ -81,7 +83,7 @@ router.post('/', optionalAuthenticate, async (req, res) => {
     const count = await prisma.incident.count();
     const incidentNumber = `INC-2026-${String(count + 101).padStart(4, '0')}`;
 
-    // Priority heuristic baseline (ML model integration in Week 4 will refine this)
+    // Priority heuristic baseline
     let initialPriority = 'MEDIUM';
     const parsedAffected = Math.max(1, parseInt(affectedCount || 1, 10));
     const upperSev = severity ? String(severity).toUpperCase() : 'MEDIUM';
@@ -93,7 +95,29 @@ router.post('/', optionalAuthenticate, async (req, res) => {
       initialPriority = 'LOW';
     }
 
+    let predictedPriority = initialPriority;
+    let priorityConfidence = 0.85;
+
+    // ML Priority Classification via Python microservice (Week 4)
+    try {
+      const mlResult = await mlClient.evaluateIncident({
+        type: normalizedType,
+        description: description || '',
+        affectedCount: parsedAffected,
+        resourceNeeds: typeof resourceNeeds === 'object' && resourceNeeds !== null ? resourceNeeds : {},
+        lat: parseFloat(lat),
+        lng: parseFloat(lng)
+      });
+      if (mlResult && mlResult.triage) {
+        predictedPriority = mlResult.triage.priority || initialPriority;
+        priorityConfidence = mlResult.triage.priority_score || (mlResult.triage.confidence ? mlResult.triage.confidence / 100 : 0.85);
+      }
+    } catch (mlErr) {
+      console.warn('ML Priority evaluation skipped, using baseline heuristic:', mlErr.message);
+    }
+
     const isLocationActive = Boolean(locationSharingActive);
+    const parsedResourceNeeds = resourceNeeds ? (typeof resourceNeeds === 'object' ? JSON.stringify(resourceNeeds) : String(resourceNeeds)) : null;
 
     const newIncident = await prisma.incident.create({
       data: {
@@ -103,8 +127,9 @@ router.post('/', optionalAuthenticate, async (req, res) => {
         affectedCount: parsedAffected,
         status: 'REPORTED',
         severity: upperSev,
-        predictedPriority: initialPriority,
-        priorityConfidence: 0.85,
+        predictedPriority,
+        priorityConfidence,
+        resourceNeeds: parsedResourceNeeds,
         lat: parseFloat(lat),
         lng: parseFloat(lng),
         address: address || null,
@@ -400,6 +425,45 @@ router.patch('/:id/location-toggle', optionalAuthenticate, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update location sharing preference.' });
+  }
+});
+
+
+// PATCH /api/incidents/:id/triage - Incident Manager updates verified triage and resource needs (Diagram 1)
+router.patch('/:id/triage', optionalAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { severity, affectedCount, resourceNeeds, managerNotes, manualPriority } = req.body;
+
+    const data = { status: 'TRIAGED' };
+    if (severity) data.severity = severity.toUpperCase();
+    if (affectedCount !== undefined) data.affectedCount = Math.max(1, parseInt(affectedCount, 10));
+    if (managerNotes) data.managerNotes = managerNotes;
+    if (manualPriority) data.manualPriority = manualPriority.toUpperCase();
+    if (resourceNeeds) {
+      data.resourceNeeds = typeof resourceNeeds === 'object' ? JSON.stringify(resourceNeeds) : String(resourceNeeds);
+    }
+
+    const updated = await prisma.incident.update({
+      where: { id },
+      data,
+      include: {
+        assignments: { include: { responder: true } },
+        reporter: { select: { id: true, name: true, phone: true } }
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      wsBroadcaster.notifyIncidentUpdated(io, updated);
+      io.to('coordinators').emit('incident:triaged', updated);
+      io.to('channel:admin_incident').emit('incident:triaged', updated);
+    }
+
+    res.json({ message: 'Incident triage and resource needs updated by Incident Manager.', incident: updated });
+  } catch (err) {
+    console.error('Error triaging incident:', err);
+    res.status(500).json({ error: 'Failed to update incident triage.' });
   }
 });
 
