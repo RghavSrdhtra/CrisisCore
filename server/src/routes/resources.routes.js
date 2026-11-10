@@ -90,6 +90,7 @@ router.post('/', optionalAuthenticate, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
+      io.emit('resource:created', newResource);
       io.emit('resource:updated', newResource);
     }
 
@@ -97,6 +98,40 @@ router.post('/', optionalAuthenticate, async (req, res) => {
   } catch (err) {
     console.error('Error creating resource:', err);
     res.status(500).json({ error: 'Failed to create resource.' });
+  }
+});
+
+// DELETE /api/resources/:id - Resource Manager removes obsolete or decommissioned resource
+router.delete('/:id', optionalAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await prisma.resource.findFirst({
+      where: {
+        OR: [
+          { id },
+          { name: id }
+        ]
+      }
+    });
+
+    if (!target) {
+      return res.status(404).json({ error: 'Resource not found.' });
+    }
+
+    const deleted = await prisma.resource.delete({
+      where: { id: target.id }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('resource:deleted', { id: target.id, name: deleted.name });
+      io.emit('resource:updated', { id: target.id, deleted: true });
+    }
+
+    res.json({ message: `Resource "${deleted.name}" deleted successfully.`, resource: deleted });
+  } catch (err) {
+    console.error('Error deleting resource:', err);
+    res.status(500).json({ error: 'Failed to delete resource.' });
   }
 });
 

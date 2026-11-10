@@ -121,6 +121,8 @@ export function initializeWebSocket(io) {
         const room = `channel:${normChannel}`;
         io.to(room).emit('channel:message', saved);
         io.to('coordinators').emit('channel:message', saved);
+        io.emit('channel:message', saved);
+        io.emit('chat:message', saved);
       } catch (e) {
         console.error('Channel send error:', e);
       }

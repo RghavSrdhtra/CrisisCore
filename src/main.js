@@ -133,6 +133,8 @@ async function loadBackendData() {
 
     updateMetrics();
     renderAll();
+    loadResourceInventory();
+    loadIncidentManagerFeed();
   } catch (err) {
     console.warn('Backend data load error:', err);
   }
@@ -281,6 +283,9 @@ function renderIncidents() {
         <div class="incident-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn-dispatch btn-brief" onclick="getAIBrief('${inc.id}', this)">
             <i class="ph ph-chat-text"></i> Brief
+          </button>
+          <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 4px 8px; font-size: 11px;" onclick="deleteIncident('${inc.dbId || inc.id}')" title="Delete Incident">
+            <i class="ph ph-trash"></i> Delete
           </button>
           ${!isDispatched && !isClosed ? `
             <button class="btn-dispatch btn-brief" style="background: ${inc.verificationStatus === 'VERIFIED' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${inc.verificationStatus === 'VERIFIED' ? '#38bdf8' : '#f59e0b'}; border: 1px solid ${inc.verificationStatus === 'VERIFIED' ? '#38bdf8' : '#f59e0b'};" onclick="triggerAllocationWithGate('${inc.dbId}', '${inc.verificationStatus || 'PENDING'}')">
@@ -1600,7 +1605,139 @@ function setupModals() {
     };
   }
 
-  // 6. Coordinator Comms Dock Wiring
+  // 6. Add Resource Modal (Resource Manager - Diagram 1 Step 2)
+  const addResourceModal = document.getElementById('addResourceModal');
+  const openAddResourceModalBtn = document.getElementById('openAddResourceModalBtn');
+  const closeAddResourceModalBtn = document.getElementById('closeAddResourceModalBtn');
+  const addResourceForm = document.getElementById('addResourceForm');
+
+  if (openAddResourceModalBtn) {
+    openAddResourceModalBtn.onclick = () => {
+      if (addResourceModal) addResourceModal.style.display = 'flex';
+    };
+  }
+  if (closeAddResourceModalBtn) {
+    closeAddResourceModalBtn.onclick = () => {
+      if (addResourceModal) addResourceModal.style.display = 'none';
+    };
+  }
+  if (addResourceForm) {
+    addResourceForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('resName')?.value.trim();
+      const category = document.getElementById('resCategory')?.value;
+      const quantityTotal = parseInt(document.getElementById('resQuantity')?.value || '1', 10);
+      const unit = document.getElementById('resUnit')?.value.trim() || 'Units';
+      const depotName = document.getElementById('resDepot')?.value.trim() || 'Central Logistics Depot';
+      const depotLat = parseFloat(document.getElementById('resLat')?.value || '37.7749');
+      const depotLng = parseFloat(document.getElementById('resLng')?.value || '-122.4194');
+
+      try {
+        const res = await fetch('/api/resources', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            category,
+            quantityTotal,
+            unit,
+            depotName,
+            depotLat,
+            depotLng
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to add resource');
+        
+        showDispatcherPrompt({
+          type: 'ACCEPTED',
+          responderName: 'RESOURCE MANAGER',
+          callsign: category,
+          notes: `Added resource: ${name} (${quantityTotal} ${unit})`
+        });
+
+        if (addResourceModal) addResourceModal.style.display = 'none';
+        addResourceForm.reset();
+        await loadResourceInventory();
+        await loadBackendData();
+      } catch (err) {
+        alert(`Error adding resource: ${err.message}`);
+      }
+    };
+  }
+
+  // 7. Add Incident Modal (Incident Manager - Diagram 1 Step 3)
+  const addIncidentModal = document.getElementById('addIncidentModal');
+  const openAddIncidentModalBtn = document.getElementById('openAddIncidentModalBtn');
+  const closeAddIncidentModalBtn = document.getElementById('closeAddIncidentModalBtn');
+  const addIncidentForm = document.getElementById('addIncidentForm');
+
+  if (openAddIncidentModalBtn) {
+    openAddIncidentModalBtn.onclick = () => {
+      if (addIncidentModal) addIncidentModal.style.display = 'flex';
+    };
+  }
+  if (closeAddIncidentModalBtn) {
+    closeAddIncidentModalBtn.onclick = () => {
+      if (addIncidentModal) addIncidentModal.style.display = 'none';
+    };
+  }
+  if (addIncidentForm) {
+    addIncidentForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const type = document.getElementById('incType')?.value;
+      const severity = document.getElementById('incSeverity')?.value;
+      const address = document.getElementById('incAddress')?.value.trim();
+      const lat = parseFloat(document.getElementById('incLat')?.value || '37.7749');
+      const lng = parseFloat(document.getElementById('incLng')?.value || '-122.4194');
+      const affectedCount = parseInt(document.getElementById('incAffected')?.value || '1', 10);
+      const description = document.getElementById('incDesc')?.value.trim();
+      const water_litres = parseInt(document.getElementById('incWater')?.value || '0', 10);
+      const food_rations = parseInt(document.getElementById('incFood')?.value || '0', 10);
+      const medical_kits = parseInt(document.getElementById('incMeds')?.value || '0', 10);
+      const ambulances = parseInt(document.getElementById('incAmbulances')?.value || '0', 10);
+
+      try {
+        const res = await fetch('/api/incidents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type,
+            severity,
+            address,
+            lat,
+            lng,
+            affectedCount,
+            description,
+            resourceNeeds: {
+              water_litres,
+              food_rations,
+              medical_kits,
+              ambulances
+            }
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create incident');
+
+        showDispatcherPrompt({
+          type: 'DECLINED',
+          responderName: 'INCIDENT MANAGER',
+          callsign: data.incident?.incidentNumber || 'NEW INCIDENT',
+          notes: `Logged incident: ${type} at ${address}`
+        });
+
+        if (addIncidentModal) addIncidentModal.style.display = 'none';
+        addIncidentForm.reset();
+        await loadBackendData();
+        await loadIncidentManagerFeed();
+      } catch (err) {
+        alert(`Error reporting incident: ${err.message}`);
+      }
+    };
+  }
+
+  // 8. Coordinator Comms Dock Wiring
   setupCoordinatorCommsDock();
 
   // 7. Navigation Bar & View Handlers
@@ -2121,9 +2258,71 @@ function initSocket() {
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Gateway:', socket.id);
       socket.emit('join:coordinator');
+      socket.emit('channel:join', { channel: 'CHANNEL_1_RESOURCE' });
+      socket.emit('channel:join', { channel: 'CHANNEL_2_INCIDENT' });
+      socket.emit('channel:join', { channel: 'CHANNEL_3_RESPONDER' });
       if (currentUser?.role === 'RESPONDER') {
         socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
       }
+    });
+
+    // 0. Dedicated Topology Communication Channels (Diagram 2)
+    socket.on('channel:message', (newMsg) => {
+      console.log('💬 Direct topology channel message received:', newMsg);
+      if (newMsg.channel === currentAdminChannel) {
+        const stream = document.getElementById('adminChannelChatStream');
+        if (stream) {
+          if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
+          const hint = stream.querySelector('.chat-empty-hint');
+          if (hint) hint.remove();
+          const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
+          const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const msgEl = document.createElement('div');
+          msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+          if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
+          msgEl.innerHTML = `
+            <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
+            <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
+            <div class="chat-time">${time}</div>
+          `;
+          stream.appendChild(msgEl);
+          stream.scrollTop = stream.scrollHeight;
+        }
+      }
+    });
+
+    // Resource Manager Real-Time Stock Updates
+    socket.on('resource:created', (newRes) => {
+      console.log('📦 Resource created event received:', newRes);
+      loadResourceInventory();
+      loadBackendData();
+    });
+
+    socket.on('resource:updated', (res) => {
+      console.log('📦 Resource updated event received:', res);
+      loadResourceInventory();
+      loadBackendData();
+    });
+
+    socket.on('resource:deleted', (res) => {
+      console.log('📦 Resource deleted event received:', res);
+      loadResourceInventory();
+      loadBackendData();
+    });
+
+    // Incident Deletion Real-Time Sync
+    socket.on('incident:deleted', (data) => {
+      console.log('🗑️ Incident deleted event received:', data);
+      state.incidents = state.incidents.filter(i => i.id !== data.incidentNumber && i.dbId !== data.id);
+      if (markersLayer && data.id && mapMarkers[data.id]) {
+        try {
+          markersLayer.removeLayer(mapMarkers[data.id]);
+          delete mapMarkers[data.id];
+        } catch (e) {}
+      }
+      updateMetrics();
+      renderAll();
+      loadIncidentManagerFeed();
     });
 
     // 1. Live Incidents
@@ -2451,14 +2650,45 @@ async function loadResourceInventory() {
               ${r.status}
             </span>
           </td>
+          <td style="padding: 12px; white-space: nowrap;">
+            <button class="btn-dispatch" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="quickReplenishResource('${r.category}', 50)" title="Quick Replenish +50">
+              +50
+            </button>
+            <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 4px 8px; font-size: 11px;" onclick="deleteResource('${r.id}')" title="Delete Resource">
+              <i class="ph ph-trash"></i>
+            </button>
+          </td>
         </tr>
       `;
     }).join('');
   } catch (err) {
     console.warn('Error loading resource inventory:', err);
-    tableBody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-dim);">Unable to connect to depot inventory.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-dim);">Unable to connect to depot inventory.</td></tr>';
   }
 }
+
+// Delete Resource Helper
+window.deleteResource = async (id) => {
+  if (!confirm('Are you sure you want to delete this resource from depot inventory?')) return;
+  try {
+    const res = await fetch(`/api/resources/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete resource');
+    showDispatcherPrompt({
+      type: 'ACCEPTED',
+      responderName: 'RESOURCE MANAGER',
+      callsign: 'DELETED',
+      notes: data.message || 'Resource deleted.'
+    });
+    await loadResourceInventory();
+    await loadBackendData();
+  } catch (err) {
+    alert(`Delete error: ${err.message}`);
+  }
+};
 
 // Quick Replenish Helper
 window.quickReplenishResource = async (category, amount) => {
@@ -2520,6 +2750,9 @@ async function loadIncidentManagerFeed() {
             </div>
 
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="deleteIncident('${inc.id}')" title="Delete Incident">
+                <i class="ph ph-trash"></i> Delete
+              </button>
               ${!isVer && !isRej ? `
                 <button class="btn-dispatch" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'VERIFY')">
                   <i class="ph-fill ph-check"></i> Verify Incident
@@ -2558,6 +2791,29 @@ async function loadIncidentManagerFeed() {
     console.warn('Error loading incident manager feed:', err);
   }
 }
+
+// Delete Incident Helper
+window.deleteIncident = async (id) => {
+  if (!confirm('Are you sure you want to delete this disaster incident?')) return;
+  try {
+    const res = await fetch(`/api/incidents/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete incident');
+    showDispatcherPrompt({
+      type: 'DECLINED',
+      responderName: 'INCIDENT MANAGER',
+      callsign: 'DELETED',
+      notes: data.message || 'Incident deleted.'
+    });
+    await loadBackendData();
+    await loadIncidentManagerFeed();
+  } catch (err) {
+    alert(`Delete error: ${err.message}`);
+  }
+};
 
 // Week 4 Gate: Administrator / Incident Manager Verification Action
 window.verifyIncident = async (incidentId, action) => {
@@ -2865,25 +3121,29 @@ function bindNewArchitectureHandlers() {
       if (!text) return;
       input.value = '';
 
+      const payload = {
+        channel: currentAdminChannel,
+        message: text,
+        senderName: currentUser ? currentUser.name : 'Central Command',
+        senderRole: currentUser ? currentUser.role : 'ADMIN',
+        senderId: currentUser ? currentUser.id : null
+      };
+
       if (socket && socket.connected) {
-        socket.emit('channel:send', {
-          channel: currentAdminChannel,
-          message: text,
-          senderName: currentUser ? currentUser.name : 'Central Command',
-          senderRole: currentUser ? currentUser.role : 'ADMIN'
-        });
-      } else {
+        socket.emit('channel:send', payload);
+      }
+
+      try {
         await fetch(`/api/chat/channel/${currentAdminChannel}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: text,
-            senderName: currentUser ? currentUser.name : 'Central Command',
-            senderRole: currentUser ? currentUser.role : 'ADMIN'
-          })
+          body: JSON.stringify(payload)
         });
+      } catch (err) {
+        console.warn('Channel HTTP fallback message warning:', err);
       }
-      setTimeout(() => loadAdminChannel(currentAdminChannel), 150);
+
+      setTimeout(() => loadAdminChannel(currentAdminChannel), 100);
     };
   }
 

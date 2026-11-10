@@ -520,4 +520,38 @@ router.patch('/:id/verify', optionalAuthenticate, async (req, res) => {
   }
 });
 
+// DELETE /api/incidents/:id - Incident Manager / Admin removes false alarms or resolved incidents
+router.delete('/:id', optionalAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await prisma.incident.findFirst({
+      where: {
+        OR: [
+          { id },
+          { incidentNumber: id }
+        ]
+      }
+    });
+
+    if (!target) {
+      return res.status(404).json({ error: 'Incident not found.' });
+    }
+
+    const deleted = await prisma.incident.delete({
+      where: { id: target.id }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('incident:deleted', { id: target.id, incidentNumber: deleted.incidentNumber });
+      io.to('coordinators').emit('incident:deleted', { id: target.id, incidentNumber: deleted.incidentNumber });
+    }
+
+    res.json({ message: `Incident ${deleted.incidentNumber} deleted successfully.`, incident: deleted });
+  } catch (err) {
+    console.error('Error deleting incident:', err);
+    res.status(500).json({ error: 'Failed to delete incident.' });
+  }
+});
+
 export default router;
