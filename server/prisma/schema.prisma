@@ -49,6 +49,9 @@ model Incident {
   // Structured Resource Needs (Diagram 1 - Incident Manager)
   resourceNeeds         String?   // JSON-encoded object: e.g. {"water_litres": 200, "food_rations": 50, "medical_kits": 5, "ambulances": 1, "rescue_teams": 1}
   managerNotes          String?   // Incident manager verification notes
+  verificationStatus    String    @default("PENDING") // PENDING | VERIFIED | REJECTED
+  verifiedAt            DateTime?
+  verifiedBy            String?
   
   // Geospatial & Privacy attributes (Section 4.1, 4.6, 4.11)
   lat                   Float
@@ -195,4 +198,18 @@ model ChatMessage {
   senderRole String   // "ADMIN" | "RESOURCE_MANAGER" | "INCIDENT_MANAGER" | "COORDINATOR" | "RESPONDER" | "CIVILIAN"
   message    String
   createdAt  DateTime @default(now())
+}
+
+// Issue & Hazard Reports from Responders (Week 8: Road blockages, inaccessible hazards, supply shortages)
+model IssueReport {
+  id            String    @id @default(uuid())
+  responderId   String?
+  responderName String?
+  incidentId    String?
+  issueType     String    // ROAD_BLOCKAGE | INACCESSIBLE_LOCATION | SUPPLY_SHORTAGE | VEHICLE_BREAKDOWN
+  description   String
+  lat           Float
+  lng           Float
+  status        String    @default("OPEN") // OPEN | RESOLVED
+  reportedAt    DateTime  @default(now())
 }

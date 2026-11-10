@@ -11,7 +11,165 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 import pulp
 
+try:
+    from ortools.linear_solver import pywraplp
+    OR_TOOLS_AVAILABLE = True
+except ImportError:
+    OR_TOOLS_AVAILABLE = False
+
 from resource_matcher import haversine_distance
+
+class ORToolsReliefOptimizer:
+    """
+    Google OR-Tools Mixed-Integer Programming (SCIP) Solver.
+    Distributes emergency resources across depots and incidents under
+    vehicle payload limits, depot availability, and priority penalties.
+    """
+    def __init__(self):
+        pass
+
+    def solve_allocation(
+        self,
+        incidents: List[Dict[str, Any]],
+        depots: List[Dict[str, Any]],
+        responders: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not OR_TOOLS_AVAILABLE:
+            # Fall back to PuLP ILP solver if OR-Tools is not installed
+            fallback = ILPReliefOptimizer()
+            return fallback.solve_allocation(incidents, depots, responders)
+
+        solver = pywraplp.Solver.CreateSolver('SCIP')
+        if not solver:
+            fallback = ILPReliefOptimizer()
+            return fallback.solve_allocation(incidents, depots, responders)
+
+        commodities = ["WATER", "FOOD", "MEDICINE"]
+        commodity_unit_weights = {"WATER": 1.0, "FOOD": 0.5, "MEDICINE": 0.3}
+        default_capacity = 500.0
+        infinity = solver.infinity()
+
+        # Decision variables
+        flows = {}
+        use_route = {}
+        for r_idx, r in enumerate(responders):
+            for d_idx, d in enumerate(depots):
+                for i_idx, inc in enumerate(incidents):
+                    var_name = f"route_{r_idx}_{d_idx}_{i_idx}"
+                    use_route[(r_idx, d_idx, i_idx)] = solver.BoolVar(var_name)
+                    for c in commodities:
+                        v_name = f"flow_{r_idx}_{d_idx}_{i_idx}_{c}"
+                        flows[(r_idx, d_idx, i_idx, c)] = solver.IntVar(0.0, infinity, v_name)
+
+        # Slack variables for unmet demand
+        unmet_demand = {}
+        for i_idx, inc in enumerate(incidents):
+            for c in commodities:
+                u_name = f"unmet_{i_idx}_{c}"
+                unmet_demand[(i_idx, c)] = solver.NumVar(0.0, infinity, u_name)
+
+        # Objective: Minimize transport distance + heavily penalize unmet demand
+        objective = solver.Objective()
+        for r_idx, r in enumerate(responders):
+            for d_idx, d in enumerate(depots):
+                for i_idx, inc in enumerate(incidents):
+                    dist_rd = haversine_distance(r.get("lat", 28.61), r.get("lng", 77.2), d.get("lat", 28.61), d.get("lng", 77.2))
+                    dist_di = haversine_distance(d.get("lat", 28.61), d.get("lng", 77.2), inc.get("lat", 28.61), inc.get("lng", 77.2))
+                    total_dist = dist_rd + dist_di
+                    objective.SetCoefficient(use_route[(r_idx, d_idx, i_idx)], total_dist)
+
+        priority_multipliers = {"CRITICAL": 500.0, "HIGH": 250.0, "MEDIUM": 100.0, "LOW": 30.0}
+        for i_idx, inc in enumerate(incidents):
+            priority = str(inc.get("priority", "HIGH")).upper()
+            mult = priority_multipliers.get(priority, 100.0)
+            for c in commodities:
+                objective.SetCoefficient(unmet_demand[(i_idx, c)], mult)
+
+        objective.SetMinimization()
+
+        # Constraint 1: Vehicle Payload Capacity
+        for r_idx, r in enumerate(responders):
+            cap = float(r.get("capacity_kg", default_capacity))
+            ct = solver.Constraint(0.0, cap, f"Cap_Resp_{r_idx}")
+            for d_idx, d in enumerate(depots):
+                for i_idx, inc in enumerate(incidents):
+                    for c in commodities:
+                        ct.SetCoefficient(flows[(r_idx, d_idx, i_idx, c)], commodity_unit_weights[c])
+
+        # Constraint 2: Link flow to binary route selection
+        M = 1000.0
+        for r_idx, r in enumerate(responders):
+            for d_idx, d in enumerate(depots):
+                for i_idx, inc in enumerate(incidents):
+                    for c in commodities:
+                        # flows[r,d,i,c] - M * use_route[r,d,i] <= 0
+                        ct = solver.Constraint(-infinity, 0.0, f"Link_{r_idx}_{d_idx}_{i_idx}_{c}")
+                        ct.SetCoefficient(flows[(r_idx, d_idx, i_idx, c)], 1.0)
+                        ct.SetCoefficient(use_route[(r_idx, d_idx, i_idx)], -M)
+
+        # Constraint 3: Depot Available Inventory
+        for d_idx, d in enumerate(depots):
+            stocks = d.get("stocks", {})
+            for c in commodities:
+                avail = float(stocks.get(c, 0))
+                ct = solver.Constraint(0.0, avail, f"DepotStock_{d_idx}_{c}")
+                for r_idx in range(len(responders)):
+                    for i_idx in range(len(incidents)):
+                        ct.SetCoefficient(flows[(r_idx, d_idx, i_idx, c)], 1.0)
+
+        # Constraint 4: Demand Satisfaction with Slack
+        demand_keys = {"WATER": "water_litres", "FOOD": "food_rations", "MEDICINE": "medical_kits"}
+        for i_idx, inc in enumerate(incidents):
+            needs = inc.get("resourceNeeds", {})
+            for c in commodities:
+                req_qty = float(needs.get(demand_keys[c], 0))
+                # sum(flows) + unmet_demand >= req_qty
+                ct = solver.Constraint(req_qty, infinity, f"Demand_{i_idx}_{c}")
+                for r_idx in range(len(responders)):
+                    for d_idx in range(len(depots)):
+                        ct.SetCoefficient(flows[(r_idx, d_idx, i_idx, c)], 1.0)
+                ct.SetCoefficient(unmet_demand[(i_idx, c)], 1.0)
+
+        # Solve model
+        result_status = solver.Solve()
+
+        status_map = {
+            pywraplp.Solver.OPTIMAL: "Optimal",
+            pywraplp.Solver.FEASIBLE: "Feasible",
+            pywraplp.Solver.INFEASIBLE: "Infeasible",
+            pywraplp.Solver.UNBOUNDED: "Unbounded",
+            pywraplp.Solver.ABNORMAL: "Abnormal"
+        }
+        status_str = status_map.get(result_status, "Unknown")
+
+        solution_routes = []
+        for r_idx, r in enumerate(responders):
+            for d_idx, d in enumerate(depots):
+                for i_idx, inc in enumerate(incidents):
+                    if use_route[(r_idx, d_idx, i_idx)].solution_value() > 0.5:
+                        cargo = {}
+                        for c in commodities:
+                            qty = int(round(flows[(r_idx, d_idx, i_idx, c)].solution_value()))
+                            if qty > 0:
+                                cargo[c] = qty
+                        if cargo:
+                            dist = haversine_distance(d.get("lat", 28.61), d.get("lng", 77.2), inc.get("lat", 28.61), inc.get("lng", 77.2))
+                            solution_routes.append({
+                                "responder": r.get("name"),
+                                "responder_callsign": r.get("callsign"),
+                                "depot": d.get("name"),
+                                "incident_id": inc.get("id"),
+                                "incident_number": inc.get("incidentNumber"),
+                                "cargo": cargo,
+                                "delivery_distance_km": dist
+                            })
+
+        return {
+            "solver_status": status_str,
+            "objective_value": round(float(solver.Objective().Value()), 2) if status_str in ["Optimal", "Feasible"] else 0.0,
+            "optimal_routes": solution_routes,
+            "algorithm": "Google OR-Tools (SCIP Mixed-Integer Solver)"
+        }
 
 class HungarianDispatcher:
     """

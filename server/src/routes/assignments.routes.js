@@ -230,6 +230,11 @@ router.patch('/:id/status', optionalAuthenticate, async (req, res) => {
           locationSharingActive: false
         }
       });
+      // Automatic privacy termination of active location breadcrumbs (Week 10)
+      await prisma.locationLog.updateMany({
+        where: { incidentId: assignment.incidentId },
+        data: { isActive: false }
+      });
 
       if (io) {
         wsBroadcaster.notifyResponderAction(io, {
@@ -305,9 +310,9 @@ router.post('/recommend', optionalAuthenticate, async (req, res) => {
     let chosenResponder = null;
     let allocatedSupplies = [];
     let stopSequence = [];
-    let recommendationScore = 0.92;
-    let algorithmUsed = 'Hungarian Bipartite + PuLP ILP + Random Forest';
-    let rationale = 'Mathematically optimized for depot proximity, vehicle payload capacity, and responder triage capability.';
+    let recommendationScore = 0.94;
+    let algorithmUsed = 'Google OR-Tools + Hungarian Bipartite + Random Forest';
+    let rationale = 'Mathematically optimized with Google OR-Tools for depot proximity, vehicle payload capacity, and responder triage capability.';
     let triageDetails = null;
 
     // Try calling Python AI Microservice (Week 4 & 5 Pipeline)

@@ -52,6 +52,7 @@ function formatIncident(dbInc) {
     type: typeStr,
     icon: dbInc.type === 'MEDICAL' ? 'ph-ambulance' : (dbInc.type === 'FIRE' ? 'ph-fire' : 'ph-shield-warning'),
     severity: (dbInc.predictedPriority || dbInc.severity || 'HIGH').toLowerCase(),
+    verificationStatus: dbInc.verificationStatus || 'PENDING',
     location: dbInc.address || `Sector Lat ${dbInc.lat.toFixed(3)}, Lng ${dbInc.lng.toFixed(3)}`,
     time: new Date(dbInc.reportedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     coords: { lat: dbInc.lat, lng: dbInc.lng },
@@ -112,6 +113,7 @@ async function loadBackendData() {
         markersLayer.clearLayers();
         mapMarkers = {};
         state.incidents.forEach(inc => addMapMarker(inc));
+        loadAndRenderIssuesOnMap();
       }
     }
 
@@ -268,8 +270,12 @@ function renderIncidents() {
           <div class="incident-time">${inc.time}</div>
         </div>
         <div class="incident-title">${inc.id} reported at ${inc.location}</div>
-        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-          Status: <strong style="text-transform: uppercase; color: var(--cyan);">${inc.status}</strong> • Casualties: ${inc.affected}
+        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span>Status: <strong style="text-transform: uppercase; color: var(--cyan);">${inc.status}</strong></span>
+          <span>•</span>
+          <span>Verification: <span class="badge" style="font-size: 10px; padding: 2px 6px; background: ${inc.verificationStatus === 'VERIFIED' ? 'rgba(16, 185, 129, 0.15)' : (inc.verificationStatus === 'REJECTED' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)')}; color: ${inc.verificationStatus === 'VERIFIED' ? '#10b981' : (inc.verificationStatus === 'REJECTED' ? '#ef4444' : '#f59e0b')}; border: 1px solid ${inc.verificationStatus === 'VERIFIED' ? '#10b981' : (inc.verificationStatus === 'REJECTED' ? '#ef4444' : '#f59e0b')}">${inc.verificationStatus || 'PENDING'}</span></span>
+          <span>•</span>
+          <span>Casualties: ${inc.affected}</span>
         </div>
         
         <div class="incident-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -277,7 +283,7 @@ function renderIncidents() {
             <i class="ph ph-chat-text"></i> Brief
           </button>
           ${!isDispatched && !isClosed ? `
-            <button class="btn-dispatch btn-brief" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8;" onclick="openHumanApprovalModal('${inc.dbId}')">
+            <button class="btn-dispatch btn-brief" style="background: ${inc.verificationStatus === 'VERIFIED' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${inc.verificationStatus === 'VERIFIED' ? '#38bdf8' : '#f59e0b'}; border: 1px solid ${inc.verificationStatus === 'VERIFIED' ? '#38bdf8' : '#f59e0b'};" onclick="triggerAllocationWithGate('${inc.dbId}', '${inc.verificationStatus || 'PENDING'}')">
               <i class="ph-fill ph-brain"></i> AI Allocation & Route
             </button>
           ` : ''}
@@ -370,6 +376,45 @@ function addMapMarker(incident) {
 
   const marker = L.marker([incident.coords.lat, incident.coords.lng], { icon }).addTo(markersLayer);
   mapMarkers[incident.id] = marker;
+}
+
+let issueMarkers = {};
+
+async function loadAndRenderIssuesOnMap() {
+  if (!map || !markersLayer || typeof L === 'undefined') return;
+  try {
+    const res = await fetch('/api/issues');
+    if (!res.ok) return;
+    const data = await res.json();
+    const openIssues = (data.issues || []).filter(i => i.status === 'OPEN');
+
+    // Clean up existing issue markers
+    Object.values(issueMarkers).forEach(m => markersLayer.removeLayer(m));
+    issueMarkers = {};
+
+    openIssues.forEach(iss => {
+      if (iss.lat === undefined || iss.lng === undefined) return;
+      const html = `
+        <div class="map-blip hazard-blip" style="position: relative;">
+          <div class="blip-pulse" style="background: #ef4444; opacity: 0.5;"></div>
+          <div class="blip-core" style="background: #ef4444; box-shadow: 0 0 12px #ef4444; border: 2px solid #fff;"></div>
+          <div class="blip-label" style="opacity: 1; top: -20px; color: #f87171; font-weight: 700; white-space: nowrap;">⚠️ ${iss.issueType.replace('_', ' ')}</div>
+        </div>
+      `;
+      const icon = L.divIcon({
+        html,
+        className: '',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      const marker = L.marker([iss.lat, iss.lng], { icon })
+        .addTo(markersLayer)
+        .bindPopup(`<strong>⚠️ FIELD HAZARD: ${escapeHtml(iss.issueType.replace('_', ' '))}</strong><br/><p style="margin: 4px 0 0;">${escapeHtml(iss.description)}</p><small style="color: #94a3b8;">Reported by: ${escapeHtml(iss.responderName || 'Field Unit')}</small>`);
+      issueMarkers[iss.id] = marker;
+    });
+  } catch (err) {
+    console.warn('Could not load issues for map:', err);
+  }
 }
 
 function renderAll() {
@@ -624,24 +669,24 @@ function updateUserUI(user) {
   if (roleBanner && roleBannerText) {
     roleBanner.className = `role-banner banner-${user.role.toLowerCase()}`;
     if (user.role === 'ADMIN') {
-      roleBannerText.innerHTML = `Operational Mode: <strong>ADMIN</strong> &nbsp;•&nbsp; ${user.agency} &nbsp;•&nbsp; Full Fleet Governance & Retention Purging`;
+      roleBannerText.innerHTML = `Operational Tier: <strong>ADMINISTRATOR</strong> &nbsp;•&nbsp; Central Command &nbsp;•&nbsp; Human-in-the-Loop Allocation & Multi-Channel Oversight`;
       if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-shield-star';
-    } else if (user.role === 'COORDINATOR') {
-      roleBannerText.innerHTML = `Operational Mode: <strong>COORDINATOR</strong> &nbsp;•&nbsp; ${user.agency} &nbsp;•&nbsp; Tactical Incident & Dispatch Command`;
-      if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-crosshair';
+    } else if (user.role === 'RESOURCE_MANAGER') {
+      roleBannerText.innerHTML = `Operational Tier: <strong>RESOURCE MANAGER</strong> &nbsp;•&nbsp; Relief Depots, Consumables & Channel 1 Logistics Comms`;
+      if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-package';
+    } else if (user.role === 'INCIDENT_MANAGER') {
+      roleBannerText.innerHTML = `Operational Tier: <strong>INCIDENT MANAGER</strong> &nbsp;•&nbsp; Triage Verification Gate, Casualties & Channel 2 Triage Comms`;
+      if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-clipboard-text';
     } else if (user.role === 'RESPONDER') {
-      roleBannerText.innerHTML = `Operational Mode: <strong>FIELD RESPONDER</strong> &nbsp;•&nbsp; ${user.agency} &nbsp;•&nbsp; Unit Telemetry & Scene Action Terminal`;
+      roleBannerText.innerHTML = `Operational Tier: <strong>FIELD RESPONDER</strong> &nbsp;•&nbsp; ${user.agency} &nbsp;•&nbsp; Stop Sequence & Delivery Terminal`;
       if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-ambulance';
-    } else if (user.role === 'CIVILIAN') {
-      roleBannerText.innerHTML = `Operational Mode: <strong>CIVILIAN PORTAL</strong> &nbsp;•&nbsp; Distress Signal Reporting & Voluntary GPS Assistance (Sec. 4.11)`;
-      if (roleBannerIcon) roleBannerIcon.className = 'ph-fill ph-user';
     }
   }
 
   applyRolePrivileges(user);
 
   if (socket && socket.connected) {
-    if (user.role === 'COORDINATOR' || user.role === 'ADMIN') {
+    if (user.role === 'COORDINATOR' || user.role === 'ADMIN' || user.role === 'RESOURCE_MANAGER' || user.role === 'INCIDENT_MANAGER') {
       socket.emit('join:coordinator');
     } else if (user.role === 'RESPONDER') {
       socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
@@ -663,7 +708,44 @@ function closeMobileSidebar() {
   if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
 }
 
+// Master Blueprint Role-Based Access Control (RBAC) Matrix
+const ROLE_TIER_PERMISSIONS = {
+  ADMIN: {
+    allowedViews: ['dashboard', 'resourceManager', 'incidentManager', 'adminChannels', 'responder', 'map', 'fleet', 'audit'],
+    defaultView: 'dashboard',
+    visibleNavIds: ['navCommandCenter', 'navResourceManager', 'navIncidentManager', 'navAdminChannels', 'navResponderTerminal', 'navFullMap', 'navFleet', 'navAuditLogs'],
+    allowedChannels: ['CHANNEL_1_RESOURCE', 'CHANNEL_2_INCIDENT', 'CHANNEL_3_RESPONDER']
+  },
+  RESOURCE_MANAGER: {
+    allowedViews: ['resourceManager', 'adminChannels'],
+    defaultView: 'resourceManager',
+    visibleNavIds: ['navResourceManager', 'navAdminChannels'],
+    allowedChannels: ['CHANNEL_1_RESOURCE']
+  },
+  INCIDENT_MANAGER: {
+    allowedViews: ['incidentManager', 'adminChannels', 'map'],
+    defaultView: 'incidentManager',
+    visibleNavIds: ['navIncidentManager', 'navAdminChannels', 'navFullMap'],
+    allowedChannels: ['CHANNEL_2_INCIDENT']
+  },
+  RESPONDER: {
+    allowedViews: ['responder'],
+    defaultView: 'responder',
+    visibleNavIds: ['navResponderTerminal'],
+    allowedChannels: ['CHANNEL_3_RESPONDER']
+  }
+};
+
 function switchView(viewName) {
+  const role = currentUser?.role || 'ADMIN';
+  const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
+
+  // Strict RBAC Access Guard
+  if (!config.allowedViews.includes(viewName)) {
+    alert(`Access Restricted: The ${role.replace('_', ' ')} tier is not authorized to access the "${viewName}" module per Master Blueprint policy.`);
+    viewName = config.defaultView;
+  }
+
   const dashboardView = document.getElementById('dashboardView');
   const responderView = document.getElementById('responderView');
   const civilianView = document.getElementById('civilianView');
@@ -701,8 +783,6 @@ function switchView(viewName) {
     if (responderView) responderView.style.display = 'none';
     if (civilianView) civilianView.style.display = 'grid';
     if (navSOSPortal) navSOSPortal.classList.add('active');
-    const bnavSOS = document.getElementById('bnavSOS');
-    if (bnavSOS) bnavSOS.classList.add('active');
     setupCivilianView();
   } else if (viewName === 'responder') {
     if (dashboardView) dashboardView.style.display = 'none';
@@ -749,18 +829,63 @@ function switchView(viewName) {
 }
 
 function applyRolePrivileges(user) {
+  if (!user) return;
+  const role = user.role || 'ADMIN';
+  const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
+
+  // 1. Audit Modal button visibility (ADMIN only)
   const openAuditBtn = document.getElementById('openAuditBtn');
   if (openAuditBtn) {
-    openAuditBtn.style.display = user.role === 'ADMIN' ? 'inline-flex' : 'none';
+    openAuditBtn.style.display = role === 'ADMIN' ? 'inline-flex' : 'none';
   }
 
-  if (user.role === 'RESPONDER') {
-    switchView('responder');
-  } else if (user.role === 'CIVILIAN') {
-    switchView('civilian');
-  } else {
-    switchView('dashboard');
+  // 2. Strict Sidebar Navigation Filtering
+  const allNavIds = [
+    'navCommandCenter',
+    'navResourceManager',
+    'navIncidentManager',
+    'navAdminChannels',
+    'navSOSPortal',
+    'navResponderTerminal',
+    'navFullMap',
+    'navFleet',
+    'navAuditLogs'
+  ];
+
+  allNavIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.display = config.visibleNavIds.includes(id) ? 'flex' : 'none';
+    }
+  });
+
+  // 3. Strict Admin Communication Channels Isolation (Diagram 2)
+  const btnCh1 = document.getElementById('btnAdminCh1');
+  const btnCh2 = document.getElementById('btnAdminCh2');
+  const btnCh3 = document.getElementById('btnAdminCh3');
+
+  if (btnCh1) btnCh1.style.display = config.allowedChannels.includes('CHANNEL_1_RESOURCE') ? 'flex' : 'none';
+  if (btnCh2) btnCh2.style.display = config.allowedChannels.includes('CHANNEL_2_INCIDENT') ? 'flex' : 'none';
+  if (btnCh3) btnCh3.style.display = config.allowedChannels.includes('CHANNEL_3_RESPONDER') ? 'flex' : 'none';
+
+  // Lock active channel to permitted channel
+  if (!config.allowedChannels.includes(currentAdminChannel)) {
+    currentAdminChannel = config.allowedChannels[0];
   }
+
+  // 4. Strict Mobile Bottom Navigation Filtering
+  const bnavCommand = document.getElementById('bnavCommand');
+  const bnavMap = document.getElementById('bnavMap');
+  const bnavSOS = document.getElementById('bnavSOS');
+  const bnavResponder = document.getElementById('bnavResponder');
+
+  if (bnavSOS) bnavSOS.style.display = 'none';
+  if (bnavCommand) bnavCommand.style.display = config.allowedViews.includes('dashboard') ? 'flex' : 'none';
+  if (bnavMap) bnavMap.style.display = config.allowedViews.includes('map') || config.allowedViews.includes('dashboard') ? 'flex' : 'none';
+  if (bnavResponder) bnavResponder.style.display = config.allowedViews.includes('responder') ? 'flex' : 'none';
+
+  // 5. Direct navigation to permitted default module
+  switchView(config.defaultView);
 }
 
 // --- Responder View & Action Terminal ---
@@ -798,6 +923,15 @@ async function setupResponderView() {
       const inc = activeAssignment.incident;
       const st = activeAssignment.status;
 
+      let stopSeq = [];
+      let allocSupplies = [];
+      try {
+        if (activeAssignment.stopSequence) stopSeq = typeof activeAssignment.stopSequence === 'string' ? JSON.parse(activeAssignment.stopSequence) : activeAssignment.stopSequence;
+      } catch (e) {}
+      try {
+        if (activeAssignment.allocatedSupplies) allocSupplies = typeof activeAssignment.allocatedSupplies === 'string' ? JSON.parse(activeAssignment.allocatedSupplies) : activeAssignment.allocatedSupplies;
+      } catch (e) {}
+
       if (assignedPriorityBadge) {
         assignedPriorityBadge.textContent = `${inc.predictedPriority || inc.severity || 'HIGH'} PRIORITY`;
         assignedPriorityBadge.className = 'badge badge-critical';
@@ -818,8 +952,48 @@ async function setupResponderView() {
           <div><strong>Contact</strong> ${inc.reporterContact || 'Not provided'}</div>
         </div>
 
+        ${allocSupplies.length > 0 ? `
+          <div style="margin-top: 12px; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); padding: 10px 12px;">
+            <strong style="font-size: 12px; color: var(--cyan); display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <i class="ph-fill ph-package"></i> Allocated Relief Payload (Week 7 Cargo):
+            </strong>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              ${allocSupplies.map(s => `
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; font-size: 11px;">
+                  ${escapeHtml(s.name)}: <strong>${s.qty} ${s.unit || ''}</strong>
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        ${stopSeq.length > 0 ? `
+          <div style="margin-top: 12px; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm); padding: 10px 12px;">
+            <strong style="font-size: 12px; color: #34d399; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+              <i class="ph-fill ph-navigation-arrow"></i> Sequential Navigation Route (Week 7 Multi-Stop):
+            </strong>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              ${stopSeq.map(stop => `
+                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 6px 10px; border-radius: 4px; border-left: 3px solid ${stop.status === 'COMPLETED' ? 'var(--green)' : 'var(--cyan)'};">
+                  <div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-main);">Stop ${stop.stopNumber}: ${escapeHtml(stop.name)}</div>
+                    <div style="font-size: 11px; color: var(--text-dim);">${escapeHtml(stop.itemsToLoad || stop.itemsToDeliver || stop.notes || stop.type)}</div>
+                  </div>
+                  ${stop.status !== 'COMPLETED' ? `
+                    <button class="btn-dispatch" style="padding: 3px 8px; font-size: 11px; background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid #34d399;" onclick="confirmDeliveryAtStop('${activeAssignment.id}', ${stop.stopNumber})">
+                      <i class="ph-fill ph-check"></i> Confirm
+                    </button>
+                  ` : `
+                    <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px;">Delivered</span>
+                  `}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         ${st === 'DISPATCHED' ? `
-          <div class="assignment-decision-card">
+          <div class="assignment-decision-card" style="margin-top: 12px;">
             <div class="decision-headline">
               <i class="ph-fill ph-warning-octagon text-amber"></i> New Dispatch Order Received
             </div>
@@ -845,6 +1019,15 @@ async function setupResponderView() {
             </button>
             <button class="btn-mission-step" onclick="executeAssignmentAction('${activeAssignment.id}', 'COMPLETED')">
               <i class="ph-fill ph-flag-checkered"></i> Mark Completed
+            </button>
+          </div>
+
+          <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-mission-step" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; font-size: 11px; padding: 6px 12px;" onclick="openReportIssueModal('${activeAssignment.id}', '${inc.dbId || inc.id}')">
+              <i class="ph-fill ph-warning-octagon"></i> Report Road Blockage / Hazard
+            </button>
+            <button class="btn-mission-step" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; font-size: 11px; padding: 6px 12px;" onclick="triggerMissionReallocation('${activeAssignment.id}')">
+              <i class="ph-fill ph-arrows-clockwise"></i> Request Dynamic Re-Route
             </button>
           </div>
         `}
@@ -1353,13 +1536,77 @@ function setupModals() {
     };
   }
 
-  // 5. Coordinator Comms Dock Wiring
+  // 5. Field Hazard & Road Blockage Reporting Modal (Week 8)
+  const reportIssueModal = document.getElementById('reportIssueModal');
+  const closeReportIssueModalBtn = document.getElementById('closeReportIssueModalBtn');
+  const cancelReportIssueBtn = document.getElementById('cancelReportIssueBtn');
+  const reportIssueForm = document.getElementById('reportIssueForm');
+
+  if (closeReportIssueModalBtn) closeReportIssueModalBtn.onclick = () => { if (reportIssueModal) reportIssueModal.style.display = 'none'; };
+  if (cancelReportIssueBtn) cancelReportIssueBtn.onclick = () => { if (reportIssueModal) reportIssueModal.style.display = 'none'; };
+
+  window.openReportIssueModal = (assignmentId, incidentId) => {
+    if (!reportIssueModal) return;
+    const assignEl = document.getElementById('issueAssignmentId');
+    const incEl = document.getElementById('issueIncidentId');
+    const descEl = document.getElementById('issueDescriptionInput');
+    if (assignEl) assignEl.value = assignmentId || '';
+    if (incEl) incEl.value = incidentId || '';
+    if (descEl) descEl.value = '';
+    reportIssueModal.style.display = 'flex';
+  };
+
+  if (reportIssueForm) {
+    reportIssueForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const incidentId = document.getElementById('issueIncidentId')?.value || null;
+      const issueType = document.getElementById('issueTypeSelect')?.value || 'ROAD_BLOCKAGE';
+      const description = document.getElementById('issueDescriptionInput')?.value?.trim();
+
+      if (!description) return;
+
+      let lat = baseLat + (Math.random() - 0.5) * 0.02;
+      let lng = baseLng + (Math.random() - 0.5) * 0.02;
+      if (currentActiveResponderAssignment?.incident) {
+        lat = currentActiveResponderAssignment.incident.lat + (Math.random() - 0.5) * 0.005;
+        lng = currentActiveResponderAssignment.incident.lng + (Math.random() - 0.5) * 0.005;
+      }
+
+      try {
+        const res = await fetch('/api/issues', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            incidentId,
+            responderId: currentActiveResponderAssignment?.responderId || null,
+            responderName: currentActiveResponderAssignment?.responder?.name || 'Unit MEDIC-01',
+            issueType,
+            description,
+            lat,
+            lng
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('Hazard / Road Blockage successfully transmitted to Central Dispatch.');
+          reportIssueModal.style.display = 'none';
+          loadAndRenderIssuesOnMap();
+        } else {
+          alert(`Error reporting hazard: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Failed to send hazard report: ${err.message}`);
+      }
+    };
+  }
+
+  // 6. Coordinator Comms Dock Wiring
   setupCoordinatorCommsDock();
 
-  // 6. Navigation Bar & View Handlers
+  // 7. Navigation Bar & View Handlers
   setupNavHandlers();
 
-  // 7. Auth Gate & Session Management
+  // 8. Auth Gate & Session Management
   setupAuthUI();
 }
 
@@ -2085,6 +2332,40 @@ function initSocket() {
         marker.setLatLng([loc.lat, loc.lng]);
       }
     });
+
+    // Week 8: Field Issue & Hazard Reporting
+    socket.on('issue:reported', (payload) => {
+      console.log('⚠️ Field issue reported:', payload);
+      showDispatcherPrompt({
+        type: 'DECLINED',
+        responderName: payload.issue?.responderName || 'FIELD ALERT',
+        callsign: payload.issue?.issueType || 'HAZARD',
+        notes: payload.notes || 'Road blockage / scene impediment reported.'
+      });
+      loadAndRenderIssuesOnMap();
+    });
+
+    // Week 4: Incident Verification Workflow
+    socket.on('incident:verified', (payload) => {
+      console.log('✅ Incident verified:', payload);
+      showDispatcherPrompt({
+        type: 'ACCEPTED',
+        responderName: 'INCIDENT MANAGER',
+        callsign: payload.incidentNumber || 'VERIFIED',
+        notes: `Incident verified: ${payload.notes}`
+      });
+      loadBackendData();
+      if (document.getElementById('incidentManagerView')?.style.display === 'grid') {
+        loadIncidentManagerFeed();
+      }
+    });
+
+    // Week 8: Dynamic Reallocation Trigger
+    socket.on('reallocation:triggered', (payload) => {
+      console.log('🔄 Reallocation triggered:', payload);
+      alert(`⚠️ Dynamic Reallocation Triggered!\n\n${payload.reason}\n\nPer Master Blueprint Week 8: Central Admin approval is required before alternate routes or resources are dispatched.`);
+      loadBackendData();
+    });
   } catch (err) {
     console.warn('Socket init warning:', err);
   }
@@ -2222,17 +2503,40 @@ async function loadIncidentManagerFeed() {
         needs = inc.resourceNeeds ? JSON.parse(inc.resourceNeeds) : {};
       } catch (e) {}
 
+      const vStatus = inc.verificationStatus || 'PENDING';
+      const isVer = vStatus === 'VERIFIED';
+      const isRej = vStatus === 'REJECTED';
+
       return `
         <div class="glass-panel" style="padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong style="color: var(--cyan); font-size: 15px;">${inc.incidentNumber}</strong>
               <span class="badge badge-critical">${inc.severity}</span>
               <span style="font-size: 12px; color: var(--text-dim);">${inc.type}</span>
+              <span class="badge" style="background: ${isVer ? 'rgba(16, 185, 129, 0.2)' : (isRej ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)')}; color: ${isVer ? '#10b981' : (isRej ? '#ef4444' : '#f59e0b')}; border: 1px solid ${isVer ? '#10b981' : (isRej ? '#ef4444' : '#f59e0b')}; font-size: 11px;">
+                <i class="ph-fill ${isVer ? 'ph-seal-check' : (isRej ? 'ph-x-circle' : 'ph-clock-countdown')}"></i> ${vStatus}
+              </span>
             </div>
-            <button class="btn-dispatch btn-brief" style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid #a78bfa;" onclick="openHumanApprovalModal('${inc.id}')">
-              <i class="ph-fill ph-brain"></i> AI Allocation & Route
-            </button>
+
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              ${!isVer && !isRej ? `
+                <button class="btn-dispatch" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'VERIFY')">
+                  <i class="ph-fill ph-check"></i> Verify Incident
+                </button>
+                <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REJECT')">
+                  <i class="ph-fill ph-x"></i> Reject
+                </button>
+              ` : (isRej ? `
+                <button class="btn-dispatch" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #64748b; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'PENDING')">
+                  <i class="ph ph-arrow-counter-clockwise"></i> Re-Open Triage
+                </button>
+              ` : `
+                <button class="btn-dispatch btn-brief" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; padding: 5px 14px; font-size: 12px;" onclick="openHumanApprovalModal('${inc.id}')">
+                  <i class="ph-fill ph-brain"></i> AI Allocation & Route (OR-Tools)
+                </button>
+              `)}
+            </div>
           </div>
 
           <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">
@@ -2255,9 +2559,53 @@ async function loadIncidentManagerFeed() {
   }
 }
 
+// Week 4 Gate: Administrator / Incident Manager Verification Action
+window.verifyIncident = async (incidentId, action) => {
+  try {
+    const res = await fetch(`/api/incidents/${incidentId}/verify`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action.toUpperCase(), notes: 'Verified via Incident Manager Console.' })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update verification status.');
+
+    showDispatcherPrompt({
+      type: action === 'VERIFY' ? 'ACCEPTED' : 'DECLINED',
+      responderName: 'INCIDENT MANAGER',
+      callsign: data.incident?.incidentNumber || 'VERIFY',
+      notes: `Incident ${action === 'VERIFY' ? 'VERIFIED' : 'REJECTED'}. Eligible for AI Allocation.`
+    });
+
+    await loadBackendData();
+    if (document.getElementById('incidentManagerView')?.style.display === 'grid') {
+      loadIncidentManagerFeed();
+    }
+  } catch (err) {
+    alert(`Verification error: ${err.message}`);
+  }
+};
+
+// Gated Allocation Trigger
+window.triggerAllocationWithGate = async (incidentDbId, status) => {
+  if (status !== 'VERIFIED') {
+    const doVerify = confirm('Week 4 Architectural Policy: Incidents must be verified by Incident Manager before AI resource allocation (Google OR-Tools) can proceed.\n\nWould you like to verify this incident now as Administrator?');
+    if (doVerify) {
+      await window.verifyIncident(incidentDbId, 'VERIFY');
+      window.openHumanApprovalModal(incidentDbId);
+    }
+    return;
+  }
+  window.openHumanApprovalModal(incidentDbId);
+};
+
 // --- 3. Admin 3-Channel Communication Hub (Diagram 2) ---
 async function loadAdminChannel(channelName) {
-  currentAdminChannel = channelName || 'CHANNEL_1_RESOURCE';
+  const role = currentUser?.role || 'ADMIN';
+  const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
+  const targetChannel = channelName || config.allowedChannels[0] || 'CHANNEL_1_RESOURCE';
+  currentAdminChannel = config.allowedChannels.includes(targetChannel) ? targetChannel : config.allowedChannels[0];
+
   const stream = document.getElementById('adminChannelChatStream');
   const title = document.getElementById('activeAdminChannelTitle');
   const sub = document.getElementById('activeAdminChannelSub');

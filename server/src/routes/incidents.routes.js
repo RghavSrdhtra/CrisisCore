@@ -467,4 +467,57 @@ router.patch('/:id/triage', optionalAuthenticate, async (req, res) => {
   }
 });
 
+// PATCH /api/incidents/:id/verify - Admin / Incident Manager Verification Workflow (Week 4 Gate)
+// Verifies or rejects incoming disaster incidents before allowing AI allocation
+router.patch('/:id/verify', optionalAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body; // action: 'VERIFY' | 'REJECT' | 'REQUEST_INFO'
+
+    const incident = await prisma.incident.findUnique({ where: { id } });
+    if (!incident) return res.status(404).json({ error: 'Incident not found.' });
+
+    const upperAction = (action || 'VERIFY').toUpperCase();
+    const isVerified = upperAction === 'VERIFY';
+    const isRejected = upperAction === 'REJECT';
+
+    const updateData = {
+      verificationStatus: isVerified ? 'VERIFIED' : (isRejected ? 'REJECTED' : 'PENDING'),
+      verifiedAt: new Date(),
+      verifiedBy: req.user?.id || 'admin-root',
+      status: isVerified ? 'TRIAGED' : (isRejected ? 'CANCELLED' : incident.status)
+    };
+
+    if (notes) updateData.managerNotes = notes;
+
+    const updated = await prisma.incident.update({
+      where: { id },
+      data: updateData,
+      include: {
+        assignments: { include: { responder: true } },
+        reporter: { select: { id: true, name: true, phone: true } }
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      wsBroadcaster.notifyIncidentUpdated(io, updated);
+      io.to('coordinators').emit('incident:verified', {
+        incidentId: id,
+        incidentNumber: updated.incidentNumber,
+        status: updated.verificationStatus,
+        notes: notes || 'Incident verified by Administrator.'
+      });
+    }
+
+    res.json({
+      message: `Incident ${updated.incidentNumber} ${updated.verificationStatus.toLowerCase()} successfully.`,
+      incident: updated
+    });
+  } catch (err) {
+    console.error('Error verifying incident:', err);
+    res.status(500).json({ error: 'Failed to verify incident.' });
+  }
+});
+
 export default router;

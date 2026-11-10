@@ -12,13 +12,13 @@ from pydantic import BaseModel, Field
 
 from priority_model import PriorityPredictor
 from resource_matcher import ResourceMatcher
-from optimizer import HungarianDispatcher, ILPReliefOptimizer
+from optimizer import HungarianDispatcher, ILPReliefOptimizer, ORToolsReliefOptimizer
 from router import RoutePlanner
 
 app = FastAPI(
     title="CrisisCore AI Allocation & Optimization Engine",
-    description="ML Priority Scoring, Multi-Depot Resource Matching, Hungarian Dispatch & ILP Routing",
-    version="2.0.0"
+    description="ML Priority Scoring, Multi-Depot Resource Matching, Hungarian Dispatch & Google OR-Tools Routing",
+    version="2.1.0"
 )
 
 app.add_middleware(
@@ -34,6 +34,7 @@ priority_predictor = PriorityPredictor()
 resource_matcher = ResourceMatcher()
 hungarian_dispatcher = HungarianDispatcher()
 ilp_optimizer = ILPReliefOptimizer()
+ortools_optimizer = ORToolsReliefOptimizer()
 route_planner = RoutePlanner()
 
 START_TIME = time.time()
@@ -70,6 +71,7 @@ def health():
         "model_architecture": "RandomForestClassifier (150 estimators, class_weight=balanced)",
         "feature_extractors": ["TF-IDF N-Gram Text Embeddings", "OneHot Categorical", "StandardScaler Numeric"],
         "solvers": [
+            "Google OR-Tools (SCIP Mixed-Integer Solver)",
             "Hungarian Bipartite Matcher (scipy.optimize.linear_sum_assignment)",
             "Integer Linear Programming (PuLP CBC Solver)"
         ]
@@ -120,13 +122,15 @@ def optimize_dispatch(req: OptimizeRequest):
     try:
         hungarian_matches = hungarian_dispatcher.match(req.incidents, req.responders)
 
-        ilp_result = None
+        allocation_result = None
         if req.depots and len(req.depots) > 0 and len(req.incidents) > 0 and len(req.responders) > 0:
-            ilp_result = ilp_optimizer.solve_allocation(req.incidents, req.depots, req.responders)
+            # Primary solver: Google OR-Tools
+            allocation_result = ortools_optimizer.solve_allocation(req.incidents, req.depots, req.responders)
 
         return {
             "hungarian_matches": hungarian_matches,
-            "ilp_allocation": ilp_result,
+            "allocation_optimization": allocation_result,
+            "ilp_allocation": allocation_result,
             "total_incidents_processed": len(req.incidents),
             "total_responders_considered": len(req.responders)
         }
