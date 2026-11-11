@@ -15,6 +15,7 @@
     "ml:train": "python ml/train_priority_model.py",
     "ml:start": "python ml/app.py",
     "android:sync": "npm run build && npx cap sync android",
+    "android:build": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug",
     "android:open": "npx cap open android"
   },
   "devDependencies": {
