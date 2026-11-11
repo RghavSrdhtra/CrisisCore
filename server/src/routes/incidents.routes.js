@@ -75,7 +75,11 @@ router.post('/', optionalAuthenticate, async (req, res) => {
 
     // Normalize type string
     let normalizedType = String(type).trim().toUpperCase().replace(/\s+/g, '_');
-    if (!['MEDICAL', 'FIRE', 'SECURITY', 'NATURAL_DISASTER', 'INDUSTRIAL', 'OTHER'].includes(normalizedType)) {
+    if (['FLOOD', 'EARTHQUAKE', 'STORM'].includes(normalizedType)) {
+      normalizedType = 'NATURAL_DISASTER';
+    } else if (normalizedType === 'COLLAPSE') {
+      normalizedType = 'INDUSTRIAL';
+    } else if (!['MEDICAL', 'FIRE', 'SECURITY', 'NATURAL_DISASTER', 'INDUSTRIAL', 'OTHER'].includes(normalizedType)) {
       normalizedType = 'OTHER';
     }
 
@@ -631,14 +635,16 @@ router.patch('/:id/verify', optionalAuthenticate, async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       wsBroadcaster.notifyIncidentUpdated(io, updated);
-      io.to('coordinators').emit('incident:verified', {
+      const verifiedPayload = {
         incidentId: incident.id,
         incidentNumber: updated.incidentNumber,
         action: upperAction,
         status: updated.status,
         verificationStatus: updated.verificationStatus,
         notes: notes || `Request marked as ${upperAction} by Incident Manager.`
-      });
+      };
+      io.to('coordinators').emit('incident:verified', verifiedPayload);
+      io.emit('incident:verified', verifiedPayload);
       io.emit('incident:status', {
         incidentId: incident.id,
         status: updated.status,

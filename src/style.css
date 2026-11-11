@@ -3623,5 +3623,115 @@ input:checked + .slider:before {
   }
 }
 
+/* Incident Manager Filter Tabs & Badges (Clean, no line wrapping) */
+#imFilterContainer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.im-tab-btn {
+  flex: 0 0 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  white-space: nowrap !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-secondary) !important;
+  cursor: pointer !important;
+  transition: all var(--transition-fast) !important;
+  line-height: 1.3 !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+}
+
+.im-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-main) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.im-tab-btn .im-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+}
+
+.im-tab-btn[data-im-filter="ALL"].active {
+  background: rgba(56, 189, 248, 0.16) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+.im-tab-btn[data-im-filter="ALL"].active .im-count-badge {
+  background: #38bdf8;
+  color: #0d1117;
+}
+
+.im-tab-btn[data-im-filter="PENDING"].active {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+}
+.im-tab-btn[data-im-filter="PENDING"].active .im-count-badge {
+  background: #f59e0b;
+  color: #0d1117;
+}
+
+.im-tab-btn[data-im-filter="VERIFIED"].active {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+}
+.im-tab-btn[data-im-filter="VERIFIED"].active .im-count-badge {
+  background: #10b981;
+  color: #0d1117;
+}
+
+.im-tab-btn[data-im-filter="DISPATCHED"].active {
+  background: rgba(167, 139, 250, 0.16) !important;
+  border-color: #a78bfa !important;
+  color: #a78bfa !important;
+}
+.im-tab-btn[data-im-filter="DISPATCHED"].active .im-count-badge {
+  background: #a78bfa;
+  color: #0d1117;
+}
+
+.im-tab-btn[data-im-filter="RESOLVED"].active {
+  background: rgba(56, 189, 248, 0.16) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+.im-tab-btn[data-im-filter="RESOLVED"].active .im-count-badge {
+  background: #38bdf8;
+  color: #0d1117;
+}
+
+.im-tab-btn[data-im-filter="REJECTED"].active {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+}
+.im-tab-btn[data-im-filter="REJECTED"].active .im-count-badge {
+  background: #ef4444;
+  color: #0d1117;
+}
+
+
 
 

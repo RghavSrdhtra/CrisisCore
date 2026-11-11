@@ -758,6 +758,9 @@ function updateUserUI(user) {
 
   applyRolePrivileges(user);
 
+  const targetConfig = ROLE_TIER_PERMISSIONS[user.role] || ROLE_TIER_PERMISSIONS.ADMIN;
+  switchView(targetConfig.defaultView);
+
   if (socket && socket.connected) {
     if (user.role === 'COORDINATOR' || user.role === 'ADMIN' || user.role === 'RESOURCE_MANAGER' || user.role === 'INCIDENT_MANAGER') {
       socket.emit('join:coordinator');
@@ -1743,17 +1746,19 @@ function setupModals() {
     };
   }
 
-  // 7. Add Incident Modal (Incident Manager - Diagram 1 Step 3)
+  // 7. Add Incident Modal (Incident Manager & Admin - Diagram 1 Step 3)
   const addIncidentModal = document.getElementById('addIncidentModal');
   const openAddIncidentModalBtn = document.getElementById('openAddIncidentModalBtn');
+  const openAddIncidentModalBtnAdmin = document.getElementById('openAddIncidentModalBtnAdmin');
   const closeAddIncidentModalBtn = document.getElementById('closeAddIncidentModalBtn');
   const addIncidentForm = document.getElementById('addIncidentForm');
 
-  if (openAddIncidentModalBtn) {
-    openAddIncidentModalBtn.onclick = () => {
-      if (addIncidentModal) addIncidentModal.style.display = 'flex';
-    };
-  }
+  const openIncModal = () => {
+    if (addIncidentModal) addIncidentModal.style.display = 'flex';
+  };
+  if (openAddIncidentModalBtn) openAddIncidentModalBtn.onclick = openIncModal;
+  if (openAddIncidentModalBtnAdmin) openAddIncidentModalBtnAdmin.onclick = openIncModal;
+
   if (closeAddIncidentModalBtn) {
     closeAddIncidentModalBtn.onclick = () => {
       if (addIncidentModal) addIncidentModal.style.display = 'none';
@@ -1781,9 +1786,13 @@ function setupModals() {
       const ambulances = parseInt(document.getElementById('incAmbulances')?.value || '0', 10);
 
       try {
+        const token = localStorage.getItem('crisiscore_token');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const res = await fetch('/api/incidents', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             type,
             severity,
@@ -1805,7 +1814,7 @@ function setupModals() {
 
         showDispatcherPrompt({
           type: 'DECLINED',
-          responderName: 'INCIDENT MANAGER',
+          responderName: currentUser?.name || 'INCIDENT MANAGER',
           callsign: data.incident?.incidentNumber || 'NEW INCIDENT',
           notes: `Logged incident: ${type} at ${address}`
         });
@@ -2432,16 +2441,19 @@ function initSocket() {
     socket.on('resource:created', (newRes) => {
       console.log('📦 Resource created event received:', newRes);
       loadBackendData();
+      loadResourceInventory();
     });
 
     socket.on('resource:updated', (res) => {
       console.log('📦 Resource updated event received:', res);
       loadBackendData();
+      loadResourceInventory();
     });
 
     socket.on('resource:deleted', (res) => {
       console.log('📦 Resource deleted event received:', res);
       loadBackendData();
+      loadResourceInventory();
     });
 
     // Incident Deletion Real-Time Sync
@@ -2455,9 +2467,15 @@ function initSocket() {
         } catch (e) {}
       }
       loadBackendData();
+      loadIncidentManagerFeed();
     });
 
     // 1. Live Incidents
+    socket.on('incident:created', () => {
+      loadBackendData();
+      loadIncidentManagerFeed();
+    });
+
     socket.on('incident:new', (newInc) => {
       console.log('🚨 Live Incident received from SOS portal:', newInc);
       const incObj = formatIncident(newInc);
@@ -2486,6 +2504,7 @@ function initSocket() {
           incidentNumber: incObj.id
         });
       }
+      loadIncidentManagerFeed();
     });
 
     socket.on('incident:updated', (updatedInc) => {
@@ -2495,6 +2514,7 @@ function initSocket() {
         updateMetrics();
         renderAll();
       }
+      loadIncidentManagerFeed();
       if (activeCivilianIncident && (activeCivilianIncident.id === updatedInc.incidentNumber || activeCivilianIncident.dbId === updatedInc.id)) {
         activeCivilianIncident.status = updatedInc.status;
         setupCivilianView();
@@ -2803,15 +2823,19 @@ async function loadResourceInventory() {
 window.deleteResource = async (id) => {
   if (!confirm('Are you sure you want to delete this resource from depot inventory?')) return;
   try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`/api/resources/${id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' }
+      headers
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to delete resource');
     showDispatcherPrompt({
       type: 'ACCEPTED',
-      responderName: 'RESOURCE MANAGER',
+      responderName: currentUser?.name || 'RESOURCE MANAGER',
       callsign: 'DELETED',
       notes: data.message || 'Resource deleted.'
     });
@@ -2825,20 +2849,25 @@ window.deleteResource = async (id) => {
 // Quick Replenish Helper
 window.quickReplenishResource = async (category, amount) => {
   try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch('/api/resources/replenish', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ category, amount })
     });
     const data = await res.json();
     if (res.ok) {
       showDispatcherPrompt({
         type: 'ACCEPTED',
-        responderName: 'RESOURCE MANAGER',
+        responderName: currentUser?.name || 'RESOURCE MANAGER',
         callsign: category,
         notes: data.message
       });
-      loadResourceInventory();
+      await loadResourceInventory();
+      await loadBackendData();
     }
   } catch (e) {
     console.error('Replenish error:', e);
@@ -3072,15 +3101,19 @@ async function loadIncidentManagerFeed() {
 window.deleteIncident = async (id) => {
   if (!confirm('Are you sure you want to delete this disaster incident?')) return;
   try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`/api/incidents/${id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' }
+      headers
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to delete incident');
     showDispatcherPrompt({
       type: 'DECLINED',
-      responderName: 'INCIDENT MANAGER',
+      responderName: currentUser?.name || 'INCIDENT MANAGER',
       callsign: 'DELETED',
       notes: data.message || 'Incident deleted.'
     });
@@ -3111,9 +3144,13 @@ window.verifyIncident = async (incidentId, action) => {
   }
 
   try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`/api/incidents/${incidentId}/verify`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ action: upperAction, notes })
     });
     const data = await res.json();
@@ -3121,15 +3158,13 @@ window.verifyIncident = async (incidentId, action) => {
 
     showDispatcherPrompt({
       type: upperAction === 'ACCEPT' || upperAction === 'VERIFY' ? 'ACCEPTED' : (upperAction === 'DONE' ? 'COMPLETED' : 'DECLINED'),
-      responderName: 'INCIDENT MANAGER',
+      responderName: currentUser?.name || 'INCIDENT MANAGER',
       callsign: data.incident?.incidentNumber || 'REQUEST',
       notes: data.message || `Request updated to ${upperAction}.`
     });
 
     await loadBackendData();
-    if (document.getElementById('incidentManagerView')?.style.display === 'grid') {
-      loadIncidentManagerFeed();
-    }
+    await loadIncidentManagerFeed();
 
     // Refresh modal if currently tracking this incident
     if (activeTrackingIncidentId === incidentId) {

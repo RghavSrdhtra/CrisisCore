@@ -157,6 +157,7 @@ export const wsBroadcaster = {
   notifyNewIncident: (io, incident) => {
     if (!io) return;
     io.emit('incident:new', incident);
+    io.emit('incident:created', incident);
   },
 
   // Notify coordinators and civilian of incident update

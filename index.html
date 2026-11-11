@@ -216,7 +216,12 @@
           <section class="glass-panel feed-panel">
             <div class="panel-header">
               <h2><i class="ph ph-warning-circle"></i> Live Incidents</h2>
-              <span class="badge" id="incidentCount">0</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="badge" id="incidentCount">0</span>
+                <button type="button" class="btn-reg-unit" id="openAddIncidentModalBtnAdmin" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; font-weight: 600; padding: 4px 8px; font-size: 11px;" title="Report / Log Incident">
+                  <i class="ph-fill ph-plus-circle"></i> + Incident
+                </button>
+              </div>
             </div>
             <div class="feed-list" id="incidentFeed">
               <!-- Injected via JS -->
@@ -640,12 +645,12 @@
             <!-- Request Lifecycle Filters & Search Bar -->
             <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px;">
               <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="imFilterContainer">
-                <button class="chat-tab-btn active im-tab-btn" data-im-filter="ALL" style="padding: 6px 14px; font-size: 12px; border-radius: 20px;">All Requests (<span id="imCountAll">0</span>)</button>
-                <button class="chat-tab-btn im-tab-btn" data-im-filter="PENDING" style="padding: 6px 14px; font-size: 12px; border-radius: 20px; color: #f59e0b;">Pending Triage (<span id="imCountPending">0</span>)</button>
-                <button class="chat-tab-btn im-tab-btn" data-im-filter="VERIFIED" style="padding: 6px 14px; font-size: 12px; border-radius: 20px; color: #10b981;">Accepted (<span id="imCountVerified">0</span>)</button>
-                <button class="chat-tab-btn im-tab-btn" data-im-filter="DISPATCHED" style="padding: 6px 14px; font-size: 12px; border-radius: 20px; color: #a78bfa;">Dispatched (<span id="imCountDispatched">0</span>)</button>
-                <button class="chat-tab-btn im-tab-btn" data-im-filter="RESOLVED" style="padding: 6px 14px; font-size: 12px; border-radius: 20px; color: #38bdf8;">Done / Resolved (<span id="imCountResolved">0</span>)</button>
-                <button class="chat-tab-btn im-tab-btn" data-im-filter="REJECTED" style="padding: 6px 14px; font-size: 12px; border-radius: 20px; color: #ef4444;">Rejected (<span id="imCountRejected">0</span>)</button>
+                <button type="button" class="im-tab-btn active" data-im-filter="ALL">All Requests <span class="im-count-badge" id="imCountAll">0</span></button>
+                <button type="button" class="im-tab-btn" data-im-filter="PENDING" style="color: #f59e0b;">Pending Triage <span class="im-count-badge" id="imCountPending">0</span></button>
+                <button type="button" class="im-tab-btn" data-im-filter="VERIFIED" style="color: #10b981;">Accepted <span class="im-count-badge" id="imCountVerified">0</span></button>
+                <button type="button" class="im-tab-btn" data-im-filter="DISPATCHED" style="color: #a78bfa;">Dispatched <span class="im-count-badge" id="imCountDispatched">0</span></button>
+                <button type="button" class="im-tab-btn" data-im-filter="RESOLVED" style="color: #38bdf8;">Done / Resolved <span class="im-count-badge" id="imCountResolved">0</span></button>
+                <button type="button" class="im-tab-btn" data-im-filter="REJECTED" style="color: #ef4444;">Rejected <span class="im-count-badge" id="imCountRejected">0</span></button>
               </div>
               <div style="display: flex; align-items: center; gap: 8px; flex: 1; max-width: 320px;">
                 <input type="text" id="incidentSearchInput" placeholder="Filter requests by ID, location..." class="chat-input-field" style="width: 100%; font-size: 12px; padding: 7px 12px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-main);" />
@@ -1368,12 +1373,15 @@
             <div class="form-group" style="flex: 1;">
               <label>Disaster Type</label>
               <select id="incType" required style="width: 100%; padding: 10px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-                <option value="FLOOD">Flood</option>
-                <option value="EARTHQUAKE">Earthquake</option>
-                <option value="FIRE">Fire</option>
                 <option value="MEDICAL">Medical Emergency</option>
+                <option value="FIRE">Fire & Hazard</option>
+                <option value="SECURITY">Security / Law Enforcement</option>
+                <option value="FLOOD">Flood Disaster</option>
+                <option value="EARTHQUAKE">Earthquake</option>
                 <option value="STORM">Storm / Cyclone</option>
                 <option value="COLLAPSE">Structure Collapse</option>
+                <option value="INDUSTRIAL">Industrial / Hazmat</option>
+                <option value="OTHER">Other Emergency</option>
               </select>
             </div>
             <div class="form-group" style="flex: 1;">
