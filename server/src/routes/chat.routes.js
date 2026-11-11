@@ -160,9 +160,10 @@ router.get('/channel/:channelName', optionalAuthenticate, async (req, res) => {
 router.post('/channel/:channelName', optionalAuthenticate, async (req, res) => {
   try {
     const { channelName } = req.params;
-    const { message, senderName, senderRole, senderId } = req.body;
+    const { senderName, senderRole, senderId } = req.body;
+    const msg = (req.body.message || req.body.text || '').trim();
 
-    if (!message || !message.trim()) {
+    if (!msg) {
       return res.status(400).json({ error: 'Message text is required.' });
     }
 
@@ -172,7 +173,7 @@ router.post('/channel/:channelName', optionalAuthenticate, async (req, res) => {
         senderId: senderId || req.user?.id || null,
         senderName: senderName || req.user?.name || 'Central Command',
         senderRole: senderRole || req.user?.role || 'ADMIN',
-        message: message.trim()
+        message: msg
       }
     });
 

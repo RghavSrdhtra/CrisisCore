@@ -537,6 +537,18 @@ router.delete('/:id', optionalAuthenticate, async (req, res) => {
       return res.status(404).json({ error: 'Incident not found.' });
     }
 
+    // Clean up dependent records and release responder units
+    const assignments = await prisma.assignment.findMany({ where: { incidentId: target.id } });
+    for (const a of assignments) {
+      await prisma.responder.update({
+        where: { id: a.responderId },
+        data: { status: 'AVAILABLE', currentIncidentId: null }
+      }).catch(() => {});
+    }
+    await prisma.assignment.deleteMany({ where: { incidentId: target.id } });
+    await prisma.chatMessage.deleteMany({ where: { incidentId: target.id } });
+    await prisma.locationLog.deleteMany({ where: { incidentId: target.id } });
+
     const deleted = await prisma.incident.delete({
       where: { id: target.id }
     });

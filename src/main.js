@@ -3173,13 +3173,30 @@ async function rejectHitlMission() {
   const reason = prompt('Please enter reason for rejecting AI allocation recommendation:', 'Alternative logistics strategy required / Scene hazards');
   if (!reason) return;
 
-  document.getElementById('humanApprovalModal').style.display = 'none';
-  showDispatcherPrompt({
-    type: 'DECLINED',
-    responderName: 'ADMIN REVIEW',
-    callsign: activeHitlRecommendation.incidentNumber,
-    notes: `Allocation rejected: ${reason}`
-  });
+  try {
+    const res = await fetch('/api/assignments/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incidentId: activeHitlRecommendation.incidentId,
+        reason,
+        notes: `AI Recommendation rejected by Admin`
+      })
+    });
+
+    document.getElementById('humanApprovalModal').style.display = 'none';
+    showDispatcherPrompt({
+      type: 'DECLINED',
+      responderName: 'ADMIN REVIEW',
+      callsign: activeHitlRecommendation.incidentNumber,
+      notes: `Allocation rejected: ${reason}`
+    });
+
+    await loadBackendData();
+  } catch (err) {
+    console.error('Error rejecting mission:', err);
+    document.getElementById('humanApprovalModal').style.display = 'none';
+  }
 }
 
 // --- 5. Responder Application Delivery Confirmation & Reallocation Triggers (Diagram 1, Step 7 & 8) ---

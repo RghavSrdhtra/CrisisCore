@@ -299,9 +299,16 @@ router.post('/recommend', optionalAuthenticate, async (req, res) => {
     }
 
     // 1. Fetch live pool of available responders and inventory
-    const availableResponders = await prisma.responder.findMany({
+    let availableResponders = await prisma.responder.findMany({
       where: { status: 'AVAILABLE' }
     });
+
+    // Resilient fallback: If all units are currently mobilized, draw from active fleet
+    if (availableResponders.length === 0) {
+      availableResponders = await prisma.responder.findMany({
+        where: { status: { not: 'UNAVAILABLE' } }
+      });
+    }
 
     const resources = await prisma.resource.findMany({
       where: { quantityAvailable: { gt: 0 } }
@@ -569,6 +576,61 @@ router.post('/approve', optionalAuthenticate, async (req, res) => {
   } catch (err) {
     console.error('Error approving mission allocation:', err);
     res.status(500).json({ error: 'Failed to approve mission dispatch.' });
+  }
+});
+
+// POST /api/assignments/reject - Human-in-the-Loop Admin Rejection
+router.post('/reject', optionalAuthenticate, async (req, res) => {
+  try {
+    const { incidentId, reason, notes } = req.body;
+    if (!incidentId) return res.status(400).json({ error: 'incidentId is required.' });
+
+    const incident = await prisma.incident.findUnique({ where: { id: incidentId } });
+    if (!incident) return res.status(404).json({ error: 'Incident not found.' });
+
+    // Mark incident as requiring re-triage or keep as TRIAGED/VERIFIED
+    await prisma.incident.update({
+      where: { id: incidentId },
+      data: { status: 'TRIAGED' }
+    });
+
+    // Record Audit Log
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id || null,
+        action: 'ADMIN_REJECTION',
+        resourceType: 'INCIDENT',
+        resourceId: incidentId,
+        details: JSON.stringify({ reason: reason || 'Recommendation rejected by Coordinator/Admin', notes })
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('coordinators').emit('allocation:rejected', {
+        incidentId,
+        incidentNumber: incident.incidentNumber,
+        reason: reason || 'Recommendation declined by human operator.',
+        notes
+      });
+      wsBroadcaster.notifyResponderAction(io, {
+        type: 'DECLINED',
+        responderName: 'ADMIN / COORDINATOR',
+        callsign: incident.incidentNumber,
+        incidentNumber: incident.incidentNumber,
+        incidentId,
+        notes: `AI Recommendation rejected: ${reason || 'Human operator intervention'}`
+      });
+    }
+
+    res.json({
+      message: 'AI recommendation rejected. Incident preserved in queue for re-evaluation.',
+      incidentId,
+      status: 'TRIAGED'
+    });
+  } catch (err) {
+    console.error('Error rejecting assignment recommendation:', err);
+    res.status(500).json({ error: 'Failed to reject recommendation.' });
   }
 });
 

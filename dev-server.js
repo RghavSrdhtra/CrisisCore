@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import http from 'http';
+import path from 'path';
 
 console.log('=======================================================');
 console.log('🚀 Starting CrisisCore Unified Development Environment');
@@ -26,9 +27,8 @@ async function start() {
     console.log('✅ Backend is already running on port 3001.');
   } else {
     console.log('📡 Launching Backend Gateway (port 3001)...');
-    backendProc = spawn('node', ['server/src/index.js'], {
-      stdio: 'inherit',
-      shell: true
+    backendProc = spawn(process.execPath, ['server/src/index.js'], {
+      stdio: 'inherit'
     });
 
     backendProc.on('error', (err) => {
@@ -36,13 +36,12 @@ async function start() {
     });
   }
 
-  // Wait 1 second before starting Vite so backend is ready
+  // Wait 1.5 seconds before starting Vite so backend is ready
   setTimeout(() => {
     console.log('⚡ Launching Vite Dev Server (port 5173)...');
-    const viteCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    const viteProc = spawn(viteCmd, ['vite'], {
-      stdio: 'inherit',
-      shell: true
+    const viteBin = path.resolve('node_modules', 'vite', 'bin', 'vite.js');
+    const viteProc = spawn(process.execPath, [viteBin], {
+      stdio: 'inherit'
     });
 
     viteProc.on('error', (err) => {
@@ -60,7 +59,7 @@ async function start() {
 
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
-  }, 1000);
+  }, 1500);
 }
 
 start();

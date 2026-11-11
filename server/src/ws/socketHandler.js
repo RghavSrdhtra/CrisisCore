@@ -97,17 +97,24 @@ export function initializeWebSocket(io) {
     
     // 5. Admin 3-Channel Communication Rooms (Diagram 2)
     // channels: CHANNEL_1_RESOURCE, CHANNEL_2_INCIDENT, CHANNEL_3_RESPONDER
-    socket.on('channel:join', ({ channel }) => {
-      if (!channel) return;
-      const room = `channel:${channel.toUpperCase()}`;
-      socket.join(room);
-      console.log(`💬 Socket ${socket.id} joined admin channel '${room}'`);
-      socket.emit('channel:joined', { room, channel: channel.toUpperCase() });
-    });
+    const handleJoinChannel = (data) => {
+      const channelName = typeof data === 'string' ? data : (data?.channel || data?.room);
+      if (!channelName) return;
+      const cleanName = channelName.startsWith('channel:') ? channelName : `channel:${channelName.toUpperCase()}`;
+      socket.join(cleanName);
+      console.log(`💬 Socket ${socket.id} joined admin channel '${cleanName}'`);
+      socket.emit('channel:joined', { room: cleanName, channel: cleanName.replace('channel:', '') });
+    };
 
-    socket.on('channel:send', async ({ channel, message, senderName, senderRole, senderId }) => {
+    socket.on('channel:join', handleJoinChannel);
+    socket.on('join:channel', handleJoinChannel);
+
+    socket.on('channel:send', async (data) => {
+      const channel = data?.channel || data?.channelId;
+      const message = data?.message || data?.text;
+      const { senderName, senderRole, senderId } = data || {};
       if (!channel || !message || !message.trim()) return;
-      const normChannel = channel.toUpperCase();
+      const normChannel = channel.replace('channel:', '').toUpperCase();
       try {
         const saved = await prisma.chatMessage.create({
           data: {
