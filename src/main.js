@@ -10,9 +10,12 @@ const baseLng = 77.2090;
 const state = {
   incidents: [],
   resources: [],
+  depotResources: [],
+  activeResourceTab: 'fleet', // 'fleet' or 'supplies'
   metrics: {
     activeCrises: 0,
     unitsDeployed: 0,
+    reliefSupplies: 0,
     avgResponse: '3m 45s'
   }
 };
@@ -115,6 +118,21 @@ async function loadBackendData() {
         state.incidents.forEach(inc => addMapMarker(inc));
         loadAndRenderIssuesOnMap();
       }
+    }
+
+    // 3. Fetch Relief Resource Inventory from DB
+    try {
+      const resRes = await fetch('/api/resources');
+      if (resRes.ok) {
+        const resData = await resRes.json();
+        state.depotResources = resData.resources || [];
+        state.resourceSummary = resData.summary || {};
+        let totalItems = 0;
+        (resData.resources || []).forEach(r => totalItems += (r.quantityAvailable || 0));
+        state.metrics.reliefSupplies = totalItems;
+      }
+    } catch (e) {
+      console.warn('Error fetching relief resources:', e);
     }
 
     // 3. Update Coordinator Comms Dock incident options
@@ -224,6 +242,7 @@ window.dispatchUnitToIncident = async (incidentDbId, selectElId) => {
 function updateMetrics() {
   state.metrics.activeCrises = state.incidents.filter(i => !['resolved', 'cancelled'].includes(i.status)).length;
   state.metrics.unitsDeployed = state.resources.filter(r => r.status !== 'available').length;
+  const suppliesCount = state.metrics.reliefSupplies || (state.depotResources ? state.depotResources.reduce((acc, r) => acc + (r.quantityAvailable || 0), 0) : 0);
   
   if (metricsContainerEl) {
     metricsContainerEl.innerHTML = `
@@ -242,6 +261,13 @@ function updateMetrics() {
         </div>
       </div>
       <div class="metric-card metric-green">
+        <div class="metric-icon"><i class="ph-fill ph-package"></i></div>
+        <div class="metric-info">
+          <h4>Relief Supplies</h4>
+          <div class="value">${suppliesCount.toLocaleString()} Units</div>
+        </div>
+      </div>
+      <div class="metric-card metric-cyan" style="border-color: rgba(56, 189, 248, 0.2);">
         <div class="metric-icon"><i class="ph-fill ph-clock-countdown"></i></div>
         <div class="metric-info">
           <h4>Avg Response</h4>
@@ -325,6 +351,48 @@ function renderIncidents() {
 
 function renderResources() {
   if (!resourceListEl) return;
+
+  const fleetBadge = document.getElementById('adminFleetCount');
+  const suppliesBadge = document.getElementById('adminSuppliesCount');
+  if (fleetBadge) fleetBadge.textContent = state.resources.length;
+  if (suppliesBadge) suppliesBadge.textContent = state.depotResources ? state.depotResources.length : 0;
+
+  if (state.activeResourceTab === 'supplies') {
+    if (!state.depotResources || state.depotResources.length === 0) {
+      resourceListEl.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 12px;">
+          No relief supplies recorded. Click "+ Resource" above to add emergency stocks.
+        </div>
+      `;
+      return;
+    }
+    resourceListEl.innerHTML = state.depotResources.map(r => {
+      const catColor = r.category === 'WATER' ? '#38bdf8' :
+                       r.category === 'FOOD' ? '#f59e0b' :
+                       r.category === 'MEDICINE' ? '#ef4444' :
+                       r.category === 'AMBULANCE' ? '#06b6d4' : '#a78bfa';
+      return `
+        <div class="resource-item" style="border-left: 3px solid ${catColor};">
+          <div class="resource-info">
+            <div class="resource-icon" style="color: ${catColor};">
+              <i class="ph-fill ph-package"></i>
+            </div>
+            <div class="resource-details">
+              <h5>${escapeHtml(r.name)}</h5>
+              <p>${r.category} • ${escapeHtml(r.depotName || 'Central Depot')} • <strong>${r.quantityAvailable} ${r.unit}</strong> available</p>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button class="btn-dispatch" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; padding: 3px 6px; font-size: 10px;" onclick="quickReplenishResource('${r.category}', 50)" title="Quick Replenish +50">+50</button>
+            <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 3px 6px; font-size: 10px;" onclick="deleteResource('${r.id}')" title="Delete Resource"><i class="ph ph-trash"></i></button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  // Otherwise: Fleet Units
   if (state.resources.length === 0) {
     resourceListEl.innerHTML = `
       <div style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 12px;">
@@ -1605,32 +1673,42 @@ function setupModals() {
     };
   }
 
-  // 6. Add Resource Modal (Resource Manager - Diagram 1 Step 2)
+  // 6. Add Resource Modal (Resource Manager & Admin)
   const addResourceModal = document.getElementById('addResourceModal');
   const openAddResourceModalBtn = document.getElementById('openAddResourceModalBtn');
+  const openAddResourceModalBtnAdmin = document.getElementById('openAddResourceModalBtnAdmin');
   const closeAddResourceModalBtn = document.getElementById('closeAddResourceModalBtn');
   const addResourceForm = document.getElementById('addResourceForm');
 
-  if (openAddResourceModalBtn) {
-    openAddResourceModalBtn.onclick = () => {
-      if (addResourceModal) addResourceModal.style.display = 'flex';
-    };
-  }
+  const openResModal = () => {
+    if (addResourceModal) addResourceModal.style.display = 'flex';
+  };
+
+  if (openAddResourceModalBtn) openAddResourceModalBtn.onclick = openResModal;
+  if (openAddResourceModalBtnAdmin) openAddResourceModalBtnAdmin.onclick = openResModal;
+
   if (closeAddResourceModalBtn) {
     closeAddResourceModalBtn.onclick = () => {
       if (addResourceModal) addResourceModal.style.display = 'none';
     };
   }
+
+  if (addResourceModal) {
+    addResourceModal.onclick = (e) => {
+      if (e.target === addResourceModal) addResourceModal.style.display = 'none';
+    };
+  }
+
   if (addResourceForm) {
     addResourceForm.onsubmit = async (e) => {
       e.preventDefault();
       const name = document.getElementById('resName')?.value.trim();
       const category = document.getElementById('resCategory')?.value;
-      const quantityTotal = parseInt(document.getElementById('resQuantity')?.value || '1', 10);
+      const quantityTotal = parseInt(document.getElementById('resQuantity')?.value || '100', 10);
       const unit = document.getElementById('resUnit')?.value.trim() || 'Units';
       const depotName = document.getElementById('resDepot')?.value.trim() || 'Central Logistics Depot';
-      const depotLat = parseFloat(document.getElementById('resLat')?.value || '37.7749');
-      const depotLng = parseFloat(document.getElementById('resLng')?.value || '-122.4194');
+      const depotLat = parseFloat(document.getElementById('resLat')?.value || '28.6139');
+      const depotLng = parseFloat(document.getElementById('resLng')?.value || '77.2090');
 
       try {
         const res = await fetch('/api/resources', {
@@ -1658,8 +1736,9 @@ function setupModals() {
 
         if (addResourceModal) addResourceModal.style.display = 'none';
         addResourceForm.reset();
-        await loadResourceInventory();
         await loadBackendData();
+        await loadResourceInventory();
+        renderResources();
       } catch (err) {
         alert(`Error adding resource: ${err.message}`);
       }
@@ -1682,14 +1761,20 @@ function setupModals() {
       if (addIncidentModal) addIncidentModal.style.display = 'none';
     };
   }
+  if (addIncidentModal) {
+    addIncidentModal.onclick = (e) => {
+      if (e.target === addIncidentModal) addIncidentModal.style.display = 'none';
+    };
+  }
+
   if (addIncidentForm) {
     addIncidentForm.onsubmit = async (e) => {
       e.preventDefault();
       const type = document.getElementById('incType')?.value;
       const severity = document.getElementById('incSeverity')?.value;
       const address = document.getElementById('incAddress')?.value.trim();
-      const lat = parseFloat(document.getElementById('incLat')?.value || '37.7749');
-      const lng = parseFloat(document.getElementById('incLng')?.value || '-122.4194');
+      const lat = parseFloat(document.getElementById('incLat')?.value || '28.6139');
+      const lng = parseFloat(document.getElementById('incLng')?.value || '77.2090');
       const affectedCount = parseInt(document.getElementById('incAffected')?.value || '1', 10);
       const description = document.getElementById('incDesc')?.value.trim();
       const water_litres = parseInt(document.getElementById('incWater')?.value || '0', 10);
@@ -1731,13 +1816,48 @@ function setupModals() {
         addIncidentForm.reset();
         await loadBackendData();
         await loadIncidentManagerFeed();
+        renderIncidents();
       } catch (err) {
         alert(`Error reporting incident: ${err.message}`);
       }
     };
   }
 
-  // 8. Coordinator Comms Dock Wiring
+  // 8. Dual Admin Resource Tabs (Fleet Units vs Depot Supplies)
+  const tabFleet = document.getElementById('tabAdminFleet');
+  const tabSupplies = document.getElementById('tabAdminSupplies');
+  if (tabFleet && tabSupplies) {
+    tabFleet.onclick = () => {
+      state.activeResourceTab = 'fleet';
+      tabFleet.classList.add('active');
+      tabFleet.style.borderBottom = '2px solid var(--cyan)';
+      tabFleet.style.color = 'var(--text-main)';
+      tabSupplies.classList.remove('active');
+      tabSupplies.style.borderBottom = '2px solid transparent';
+      tabSupplies.style.color = 'var(--text-dim)';
+      renderResources();
+    };
+    tabSupplies.onclick = () => {
+      state.activeResourceTab = 'supplies';
+      tabSupplies.classList.add('active');
+      tabSupplies.style.borderBottom = '2px solid var(--cyan)';
+      tabSupplies.style.color = 'var(--text-main)';
+      tabFleet.classList.remove('active');
+      tabFleet.style.borderBottom = '2px solid transparent';
+      tabFleet.style.color = 'var(--text-dim)';
+      renderResources();
+    };
+  }
+
+  // 9. Comms Dock 3-Channel Shortcut
+  const openChannelsBtn = document.getElementById('openAdminChannelsFromDockBtn');
+  if (openChannelsBtn) {
+    openChannelsBtn.onclick = () => {
+      switchView('adminChannels');
+    };
+  }
+
+  // 10. Coordinator Comms Dock Wiring
   setupCoordinatorCommsDock();
 
   // 7. Navigation Bar & View Handlers
@@ -2269,13 +2389,26 @@ function initSocket() {
     // 0. Dedicated Topology Communication Channels (Diagram 2)
     socket.on('channel:message', (newMsg) => {
       console.log('💬 Direct topology channel message received:', newMsg);
-      if (newMsg.channel === currentAdminChannel) {
+      if (newMsg.channel && currentAdminChannel && newMsg.channel.toUpperCase() === currentAdminChannel.toUpperCase()) {
         const stream = document.getElementById('adminChannelChatStream');
         if (stream) {
           if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
+          const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
+
+          // Deduplicate if already optimistically appended
+          if (isSelf) {
+            const untagged = stream.querySelectorAll('.chat-msg.self:not([data-msg-id])');
+            if (untagged.length > 0) {
+              const last = untagged[untagged.length - 1];
+              if (last.querySelector('.chat-bubble')?.textContent === newMsg.message) {
+                if (newMsg.id) last.setAttribute('data-msg-id', newMsg.id);
+                return;
+              }
+            }
+          }
+
           const hint = stream.querySelector('.chat-empty-hint');
           if (hint) hint.remove();
-          const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
           const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const msgEl = document.createElement('div');
           msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
@@ -2294,19 +2427,16 @@ function initSocket() {
     // Resource Manager Real-Time Stock Updates
     socket.on('resource:created', (newRes) => {
       console.log('📦 Resource created event received:', newRes);
-      loadResourceInventory();
       loadBackendData();
     });
 
     socket.on('resource:updated', (res) => {
       console.log('📦 Resource updated event received:', res);
-      loadResourceInventory();
       loadBackendData();
     });
 
     socket.on('resource:deleted', (res) => {
       console.log('📦 Resource deleted event received:', res);
-      loadResourceInventory();
       loadBackendData();
     });
 
@@ -2320,9 +2450,7 @@ function initSocket() {
           delete mapMarkers[data.id];
         } catch (e) {}
       }
-      updateMetrics();
-      renderAll();
-      loadIncidentManagerFeed();
+      loadBackendData();
     });
 
     // 1. Live Incidents
@@ -2887,14 +3015,18 @@ async function loadAdminChannel(channelName) {
   }
 
   if (stream) {
-    stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">Connecting to channel...</div>';
+    if (stream.children.length === 0) {
+      stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">Connecting to channel...</div>';
+    }
     try {
       const res = await fetch(`/api/chat/channel/${currentAdminChannel}`);
       if (!res.ok) throw new Error('Failed to load channel messages');
       const data = await res.json();
       renderChatStream(stream, data.messages || [], currentUser ? currentUser.name : 'Central Command');
     } catch (e) {
-      stream.innerHTML = '<div class="chat-empty-hint">Direct topology channel online. Transmit instructions below.</div>';
+      if (stream.children.length === 0) {
+        stream.innerHTML = '<div class="chat-empty-hint">Direct topology channel online. Transmit instructions below.</div>';
+      }
     }
   }
 }
@@ -3129,21 +3261,37 @@ function bindNewArchitectureHandlers() {
         senderId: currentUser ? currentUser.id : null
       };
 
+      // 1. Instant optimistic append for zero-latency UI
+      const stream = document.getElementById('adminChannelChatStream');
+      if (stream) {
+        const hint = stream.querySelector('.chat-empty-hint');
+        if (hint) hint.remove();
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg self';
+        msgEl.innerHTML = `
+          <div class="chat-sender">${escapeHtml(payload.senderName)} (${escapeHtml(payload.senderRole)})</div>
+          <div class="chat-bubble">${escapeHtml(payload.message)}</div>
+          <div class="chat-time">${time}</div>
+        `;
+        stream.appendChild(msgEl);
+        stream.scrollTop = stream.scrollHeight;
+      }
+
+      // 2. Deliver via socket if live, fallback to REST
       if (socket && socket.connected) {
         socket.emit('channel:send', payload);
+      } else {
+        try {
+          await fetch(`/api/chat/channel/${currentAdminChannel}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } catch (err) {
+          console.warn('Channel HTTP fallback message warning:', err);
+        }
       }
-
-      try {
-        await fetch(`/api/chat/channel/${currentAdminChannel}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch (err) {
-        console.warn('Channel HTTP fallback message warning:', err);
-      }
-
-      setTimeout(() => loadAdminChannel(currentAdminChannel), 100);
     };
   }
 
