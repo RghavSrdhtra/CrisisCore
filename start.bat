@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Guarantee execution from project root
+cd /d "%~dp0"
+
 echo =======================================================
 echo    Welcome to CrisisCore - Rapid Crisis Response
 echo =======================================================
@@ -10,7 +13,7 @@ echo.
 where node >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Node.js is not found on your system.
-    echo Please download and install Node.js (v18 or higher) from:
+    echo Please download and install Node.js v18 or higher from:
     echo   https://nodejs.org/
     echo Once installed, restart your terminal and run start.bat again.
     echo.
@@ -36,7 +39,7 @@ if not exist "server\.env" (
 
 :: 3. Check Root Dependencies
 if not exist "node_modules\" (
-    echo [SETUP] Installing frontend dependencies (this only happens once)...
+    echo [SETUP] Installing frontend dependencies - first-time setup...
     call npm install
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to install root dependencies.
@@ -47,7 +50,7 @@ if not exist "node_modules\" (
 
 :: 4. Check Backend Dependencies
 if not exist "server\node_modules\" (
-    echo [SETUP] Installing backend dependencies (this only happens once)...
+    echo [SETUP] Installing backend dependencies - first-time setup...
     call npm --prefix server install
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to install server dependencies.
@@ -78,12 +81,13 @@ echo Press Ctrl+C at any time to stop.
 echo.
 
 :: Launch browser in background after 3 seconds
-start "" cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:5173"
+start "" powershell -NoProfile -Command "Start-Sleep -Seconds 3; Start-Process 'http://localhost:5173'"
 
 :: Start unified dev server (runs backend + frontend)
 call npm run dev
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo [NOTE] Server terminated.
-    pause
-)
+
+echo.
+echo =======================================================
+echo CrisisCore server session ended.
+echo =======================================================
+pause
