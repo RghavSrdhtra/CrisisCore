@@ -2842,6 +2842,10 @@ window.quickReplenishResource = async (category, amount) => {
 };
 
 // --- 2. Incident Manager Console (Diagram 1, Step 3) ---
+let currentImFilter = 'ALL';
+let currentImSearch = '';
+let activeTrackingIncidentId = null;
+
 async function loadIncidentManagerFeed() {
   const container = document.getElementById('incidentManagerFeed');
   const countBadge = document.getElementById('pendingTriageCountBadge');
@@ -2851,11 +2855,69 @@ async function loadIncidentManagerFeed() {
     const res = await fetch('/api/incidents');
     if (!res.ok) throw new Error('Failed to load incidents');
     const data = await res.json();
-    const activeIncs = data.incidents.filter(i => !['RESOLVED', 'CANCELLED'].includes(i.status));
+    const allIncs = data.incidents || [];
 
-    if (countBadge) countBadge.textContent = `${activeIncs.length} Active in Triage`;
+    // Tally Counts for all filter tabs
+    const countAll = allIncs.length;
+    const countPending = allIncs.filter(i => (i.verificationStatus === 'PENDING' || !i.verificationStatus) && i.status !== 'RESOLVED' && i.status !== 'CANCELLED').length;
+    const countVerified = allIncs.filter(i => i.verificationStatus === 'VERIFIED' && i.status !== 'RESOLVED' && i.status !== 'CANCELLED').length;
+    const countDispatched = allIncs.filter(i => ['DISPATCHED', 'ON_SCENE'].includes(i.status)).length;
+    const countResolved = allIncs.filter(i => i.status === 'RESOLVED').length;
+    const countRejected = allIncs.filter(i => i.verificationStatus === 'REJECTED' || i.status === 'CANCELLED').length;
 
-    container.innerHTML = activeIncs.map(inc => {
+    if (countBadge) countBadge.textContent = `${countPending} Pending Triage`;
+    const elAll = document.getElementById('imCountAll');
+    if (elAll) elAll.textContent = countAll;
+    const elPending = document.getElementById('imCountPending');
+    if (elPending) elPending.textContent = countPending;
+    const elVerified = document.getElementById('imCountVerified');
+    if (elVerified) elVerified.textContent = countVerified;
+    const elDispatched = document.getElementById('imCountDispatched');
+    if (elDispatched) elDispatched.textContent = countDispatched;
+    const elResolved = document.getElementById('imCountResolved');
+    if (elResolved) elResolved.textContent = countResolved;
+    const elRejected = document.getElementById('imCountRejected');
+    if (elRejected) elRejected.textContent = countRejected;
+
+    // Apply Filter & Search
+    let filteredIncs = allIncs.filter(inc => {
+      if (currentImFilter === 'PENDING') {
+        return (inc.verificationStatus === 'PENDING' || !inc.verificationStatus) && inc.status !== 'RESOLVED' && inc.status !== 'CANCELLED';
+      } else if (currentImFilter === 'VERIFIED') {
+        return inc.verificationStatus === 'VERIFIED' && inc.status !== 'RESOLVED' && inc.status !== 'CANCELLED';
+      } else if (currentImFilter === 'DISPATCHED') {
+        return ['DISPATCHED', 'ON_SCENE'].includes(inc.status);
+      } else if (currentImFilter === 'RESOLVED') {
+        return inc.status === 'RESOLVED';
+      } else if (currentImFilter === 'REJECTED') {
+        return inc.verificationStatus === 'REJECTED' || inc.status === 'CANCELLED';
+      }
+      return true;
+    });
+
+    if (currentImSearch.trim()) {
+      const q = currentImSearch.toLowerCase().trim();
+      filteredIncs = filteredIncs.filter(i =>
+        (i.incidentNumber && i.incidentNumber.toLowerCase().includes(q)) ||
+        (i.type && i.type.toLowerCase().includes(q)) ||
+        (i.description && i.description.toLowerCase().includes(q)) ||
+        (i.address && i.address.toLowerCase().includes(q)) ||
+        (i.severity && i.severity.toLowerCase().includes(q))
+      );
+    }
+
+    if (filteredIncs.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px; color: var(--text-dim); background: rgba(0,0,0,0.2); border-radius: var(--radius); border: 1px dashed var(--border-color);">
+          <i class="ph ph-tray" style="font-size: 32px; display: block; margin-bottom: 8px; opacity: 0.5;"></i>
+          <strong>No disaster requests found in this filter view.</strong>
+          <p style="font-size: 12px; margin-top: 4px;">Incoming citizen SOS requests or newly reported incidents will appear here.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = filteredIncs.map(inc => {
       let needs = {};
       try {
         needs = inc.resourceNeeds ? JSON.parse(inc.resourceNeeds) : {};
@@ -2863,49 +2925,131 @@ async function loadIncidentManagerFeed() {
 
       const vStatus = inc.verificationStatus || 'PENDING';
       const isVer = vStatus === 'VERIFIED';
-      const isRej = vStatus === 'REJECTED';
+      const isRej = vStatus === 'REJECTED' || inc.status === 'CANCELLED';
+      const isDone = inc.status === 'RESOLVED';
+      const isDispatched = ['DISPATCHED', 'ON_SCENE'].includes(inc.status);
+
+      // Determine Lifecycle Step (1: Reported, 2: Accepted/Triaged, 3: Dispatched, 4: Done)
+      let currentStep = 1;
+      if (isDone) currentStep = 4;
+      else if (isDispatched) currentStep = 3;
+      else if (isVer) currentStep = 2;
+
+      const formattedTime = new Date(inc.reportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
 
       return `
-        <div class="glass-panel" style="padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <div class="glass-panel" style="padding: 16px 20px; border: 1px solid ${isDone ? 'rgba(56, 189, 248, 0.3)' : (isRej ? 'rgba(239, 68, 68, 0.3)' : 'var(--border-color)')}; border-radius: var(--radius); background: ${isDone ? 'rgba(15, 23, 42, 0.7)' : 'var(--bg-card)'};">
+          <!-- Card Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <strong style="color: var(--cyan); font-size: 15px;">${inc.incidentNumber}</strong>
-              <span class="badge badge-critical">${inc.severity}</span>
-              <span style="font-size: 12px; color: var(--text-dim);">${inc.type}</span>
-              <span class="badge" style="background: ${isVer ? 'rgba(16, 185, 129, 0.2)' : (isRej ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)')}; color: ${isVer ? '#10b981' : (isRej ? '#ef4444' : '#f59e0b')}; border: 1px solid ${isVer ? '#10b981' : (isRej ? '#ef4444' : '#f59e0b')}; font-size: 11px;">
-                <i class="ph-fill ${isVer ? 'ph-seal-check' : (isRej ? 'ph-x-circle' : 'ph-clock-countdown')}"></i> ${vStatus}
-              </span>
+              <button onclick="openTrackRequestModal('${inc.id}')" style="background: rgba(167, 139, 250, 0.15); border: 1px solid #a78bfa; color: #a78bfa; border-radius: 6px; padding: 4px 10px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Open Individual Tracking Telemetry">
+                <i class="ph-fill ph-radar"></i> ${inc.incidentNumber}
+              </button>
+              <span class="badge ${inc.severity === 'CRITICAL' ? 'badge-critical' : 'badge-high'}">${inc.severity}</span>
+              <span style="font-size: 12px; color: var(--text-dim); text-transform: uppercase;">${inc.type}</span>
+              <span style="font-size: 11px; color: var(--text-dim);"><i class="ph ph-clock"></i> ${formattedTime}</span>
+
+              <!-- Live Status Pill -->
+              ${isDone ? `
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; font-size: 11px;">
+                  <i class="ph-fill ph-check-circle"></i> DONE / RESOLVED
+                </span>
+              ` : (isRej ? `
+                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; font-size: 11px;">
+                  <i class="ph-fill ph-x-circle"></i> REJECTED
+                </span>
+              ` : (isDispatched ? `
+                <span class="badge" style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid #a78bfa; font-size: 11px;">
+                  <i class="ph-fill ph-navigation-arrow"></i> DISPATCHED (${inc.status})
+                </span>
+              ` : (isVer ? `
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; font-size: 11px;">
+                  <i class="ph-fill ph-seal-check"></i> ACCEPTED & TRIAGED
+                </span>
+              ` : `
+                <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; font-size: 11px;">
+                  <i class="ph-fill ph-clock-countdown"></i> PENDING TRIAGE
+                </span>
+              `)))}
             </div>
 
+            <!-- Action Toolbar for Incident Manager -->
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-              <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="deleteIncident('${inc.id}')" title="Delete Incident">
-                <i class="ph ph-trash"></i> Delete
+              <button class="btn-dispatch" style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid #a78bfa; padding: 5px 12px; font-size: 12px;" onclick="openTrackRequestModal('${inc.id}')" title="Track Request Timeline">
+                <i class="ph-fill ph-radar"></i> Track
               </button>
-              ${!isVer && !isRej ? `
-                <button class="btn-dispatch" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'VERIFY')">
-                  <i class="ph-fill ph-check"></i> Verify Incident
-                </button>
-                <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REJECT')">
-                  <i class="ph-fill ph-x"></i> Reject
-                </button>
-              ` : (isRej ? `
-                <button class="btn-dispatch" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #64748b; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'PENDING')">
+
+              ${!isDone && !isRej ? `
+                ${!isVer ? `
+                  <button class="btn-dispatch" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'ACCEPT')">
+                    <i class="ph-fill ph-check"></i> Accept Request
+                  </button>
+                  <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REJECT')">
+                    <i class="ph-fill ph-x"></i> Reject
+                  </button>
+                ` : `
+                  <button class="btn-dispatch" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; padding: 5px 12px; font-size: 12px; font-weight: 600;" onclick="verifyIncident('${inc.id}', 'DONE')">
+                    <i class="ph-fill ph-check-circle"></i> Mark as Done
+                  </button>
+                  <button class="btn-dispatch btn-brief" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; padding: 5px 14px; font-size: 12px;" onclick="openHumanApprovalModal('${inc.id}')">
+                    <i class="ph-fill ph-brain"></i> AI Allocation (OR-Tools)
+                  </button>
+                  <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REJECT')">
+                    <i class="ph-fill ph-x"></i> Reject
+                  </button>
+                `}
+              ` : (isDone ? `
+                <button class="btn-dispatch" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #64748b; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REOPEN')">
                   <i class="ph ph-arrow-counter-clockwise"></i> Re-Open Triage
                 </button>
               ` : `
-                <button class="btn-dispatch btn-brief" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; padding: 5px 14px; font-size: 12px;" onclick="openHumanApprovalModal('${inc.id}')">
-                  <i class="ph-fill ph-brain"></i> AI Allocation & Route (OR-Tools)
+                <button class="btn-dispatch" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #64748b; padding: 5px 12px; font-size: 12px;" onclick="verifyIncident('${inc.id}', 'REOPEN')">
+                  <i class="ph ph-arrow-counter-clockwise"></i> Re-Evaluate Request
                 </button>
               `)}
+
+              <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; font-size: 12px;" onclick="deleteIncident('${inc.id}')" title="Delete Record">
+                <i class="ph ph-trash"></i>
+              </button>
             </div>
           </div>
 
-          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">
+          <!-- 4-Stage Visual Lifecycle Stepper -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin: 12px 0 14px 0; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 18px; border: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${currentStep >= 1 ? '#38bdf8' : 'var(--text-dim)'}; font-weight: 600;">
+              <span style="width: 22px; height: 22px; border-radius: 50%; background: ${currentStep >= 1 ? '#38bdf8' : '#334155'}; color: #000; display: flex; align-items: center; justify-content: center; font-size: 11px;">1</span>
+              <span>Reported</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: ${currentStep >= 2 ? '#10b981' : '#334155'}; min-width: 20px;"></div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${currentStep >= 2 ? '#10b981' : 'var(--text-dim)'}; font-weight: 600;">
+              <span style="width: 22px; height: 22px; border-radius: 50%; background: ${currentStep >= 2 ? '#10b981' : '#334155'}; color: #000; display: flex; align-items: center; justify-content: center; font-size: 11px;">2</span>
+              <span>Accepted</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: ${currentStep >= 3 ? '#a78bfa' : '#334155'}; min-width: 20px;"></div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${currentStep >= 3 ? '#a78bfa' : 'var(--text-dim)'}; font-weight: 600;">
+              <span style="width: 22px; height: 22px; border-radius: 50%; background: ${currentStep >= 3 ? '#a78bfa' : '#334155'}; color: #000; display: flex; align-items: center; justify-content: center; font-size: 11px;">3</span>
+              <span>Dispatched</span>
+            </div>
+            <div style="flex: 1; height: 2px; background: ${currentStep >= 4 ? '#38bdf8' : '#334155'}; min-width: 20px;"></div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${currentStep >= 4 ? '#38bdf8' : (isRej ? '#ef4444' : 'var(--text-dim)')}; font-weight: 600;">
+              <span style="width: 22px; height: 22px; border-radius: 50%; background: ${currentStep >= 4 ? '#38bdf8' : (isRej ? '#ef4444' : '#334155')}; color: #000; display: flex; align-items: center; justify-content: center; font-size: 11px;">${isRej ? '✕' : '4'}</span>
+              <span>${isRej ? 'Rejected' : 'Done'}</span>
+            </div>
+          </div>
+
+          <!-- Description & Situational Context -->
+          <p style="font-size: 13px; color: var(--text-main); margin-bottom: 8px; line-height: 1.4;">
             ${escapeHtml(inc.description || 'Emergency assistance requested.')}
           </p>
 
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-dim); margin-bottom: 12px;">
+            <div><i class="ph ph-map-pin"></i> <strong>Location:</strong> ${escapeHtml(inc.address || 'Target Zone')} (${inc.lat?.toFixed(4)}, ${inc.lng?.toFixed(4)})</div>
+            <div><i class="ph ph-user"></i> <strong>Reported By:</strong> ${escapeHtml(inc.reporter?.name || inc.reporterContact || 'Citizen SOS')}</div>
+            ${inc.managerNotes ? `<div><i class="ph ph-note"></i> <strong>Manager Notes:</strong> ${escapeHtml(inc.managerNotes)}</div>` : ''}
+          </div>
+
           <!-- Structured Resource Breakdown -->
-          <div style="background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px;">
+          <div style="background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px; border: 1px solid rgba(255,255,255,0.04);">
             <div><strong>Casualties:</strong> <span style="color: var(--red);">${inc.affectedCount} individuals</span></div>
             <div><strong>Water Needed:</strong> <span style="color: #38bdf8;">${needs.water_litres || 0} L</span></div>
             <div><strong>Food Rations:</strong> <span style="color: #f59e0b;">${needs.food_rations || 0} Rations</span></div>
@@ -2943,30 +3087,223 @@ window.deleteIncident = async (id) => {
   }
 };
 
-// Week 4 Gate: Administrator / Incident Manager Verification Action
+// Incident Manager: Accept, Reject, Mark as Done, or Reopen Individual Request
 window.verifyIncident = async (incidentId, action) => {
+  let notes = '';
+  const upperAction = action.toUpperCase();
+
+  if (upperAction === 'REJECT') {
+    const reason = prompt('Please enter the reason for rejecting this emergency request:', 'Duplicate request / Resolved by local units / False alarm');
+    if (reason === null) return; // user cancelled
+    notes = reason || 'Rejected by Incident Manager';
+  } else if (upperAction === 'DONE' || upperAction === 'RESOLVE') {
+    const confirmDone = confirm('Mark this emergency request as DONE and completed? This will release assigned responders and finalize resolution.');
+    if (!confirmDone) return;
+    notes = 'Relief delivery and scene triage completed. Mission closed.';
+  } else if (upperAction === 'ACCEPT' || upperAction === 'VERIFY') {
+    notes = 'Emergency request accepted and verified by Incident Manager. Queued for AI Allocation.';
+  } else if (upperAction === 'REOPEN') {
+    notes = 'Request re-opened for triage by Incident Manager.';
+  }
+
   try {
     const res = await fetch(`/api/incidents/${incidentId}/verify`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: action.toUpperCase(), notes: 'Verified via Incident Manager Console.' })
+      body: JSON.stringify({ action: upperAction, notes })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update verification status.');
+    if (!res.ok) throw new Error(data.error || 'Failed to update request state.');
 
     showDispatcherPrompt({
-      type: action === 'VERIFY' ? 'ACCEPTED' : 'DECLINED',
+      type: upperAction === 'ACCEPT' || upperAction === 'VERIFY' ? 'ACCEPTED' : (upperAction === 'DONE' ? 'COMPLETED' : 'DECLINED'),
       responderName: 'INCIDENT MANAGER',
-      callsign: data.incident?.incidentNumber || 'VERIFY',
-      notes: `Incident ${action === 'VERIFY' ? 'VERIFIED' : 'REJECTED'}. Eligible for AI Allocation.`
+      callsign: data.incident?.incidentNumber || 'REQUEST',
+      notes: data.message || `Request updated to ${upperAction}.`
     });
 
     await loadBackendData();
     if (document.getElementById('incidentManagerView')?.style.display === 'grid') {
       loadIncidentManagerFeed();
     }
+
+    // Refresh modal if currently tracking this incident
+    if (activeTrackingIncidentId === incidentId) {
+      openTrackRequestModal(incidentId);
+    }
   } catch (err) {
-    alert(`Verification error: ${err.message}`);
+    alert(`Action error: ${err.message}`);
+  }
+};
+
+// Open Individual Request Tracking Modal
+window.openTrackRequestModal = async (incidentId) => {
+  activeTrackingIncidentId = incidentId;
+  const modal = document.getElementById('trackRequestModal');
+  const content = document.getElementById('trackModalContent');
+  const footer = document.getElementById('trackModalFooter');
+  const title = document.getElementById('trackModalTitle');
+  const subtitle = document.getElementById('trackModalSubtitle');
+
+  if (!modal || !content) return;
+  modal.style.display = 'flex';
+  content.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-dim);"><i class="ph ph-spinner ph-spin" style="font-size: 28px;"></i><p style="margin-top: 10px;">Loading tracking telemetry...</p></div>';
+
+  try {
+    const res = await fetch(`/api/incidents/${incidentId}/tracking`);
+    if (!res.ok) throw new Error('Failed to load tracking data.');
+    const data = await res.json();
+    const inc = data.incident;
+    const timeline = data.timeline || [];
+
+    if (title) title.textContent = `Tracking: ${inc.incidentNumber}`;
+    if (subtitle) subtitle.textContent = `${inc.type} • ${inc.severity} Severity • Status: ${inc.status}`;
+
+    let needs = {};
+    try {
+      needs = inc.resourceNeeds ? JSON.parse(inc.resourceNeeds) : {};
+    } catch (e) {}
+
+    const isDone = inc.status === 'RESOLVED';
+    const isRej = inc.verificationStatus === 'REJECTED' || inc.status === 'CANCELLED';
+    const isVer = inc.verificationStatus === 'VERIFIED';
+    const activeAssignment = inc.assignments && inc.assignments[0];
+
+    content.innerHTML = `
+      <!-- Request Snapshot Header -->
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <div>
+            <h4 style="margin: 0; font-size: 16px; color: #fff;">${escapeHtml(inc.description || 'Emergency assistance request')}</h4>
+            <span style="font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+              <i class="ph ph-map-pin"></i> ${escapeHtml(inc.address || 'Target Area')} • Lat: ${inc.lat?.toFixed(4)}, Lng: ${inc.lng?.toFixed(4)}
+            </span>
+          </div>
+          <div>
+            <span class="badge ${isDone ? 'badge-low' : (isRej ? 'badge-critical' : 'badge-high')}" style="font-size: 12px; padding: 4px 10px;">
+              ${inc.status}
+            </span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; font-size: 12px;">
+          <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+            <span style="color: var(--text-dim); display: block;">Reported At:</span>
+            <strong>${new Date(inc.reportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</strong>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+            <span style="color: var(--text-dim); display: block;">Reporter:</span>
+            <strong>${escapeHtml(inc.reporter?.name || inc.reporterContact || 'Citizen SOS')}</strong>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+            <span style="color: var(--text-dim); display: block;">Casualties:</span>
+            <strong style="color: var(--red);">${inc.affectedCount} individuals</strong>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+            <span style="color: var(--text-dim); display: block;">Assigned Unit:</span>
+            <strong style="color: #a78bfa;">${activeAssignment ? activeAssignment.responder?.callsign : 'None Assigned'}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resource Requirements vs Allocations -->
+      <div style="margin-bottom: 20px;">
+        <h5 style="font-size: 13px; color: var(--cyan); margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+          <i class="ph-fill ph-package"></i> Requisitioned Relief Resources
+        </h5>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 12px;">
+          <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); padding: 10px; border-radius: 8px;">
+            <span style="color: #38bdf8;">Water</span>
+            <div style="font-size: 15px; font-weight: 700; color: #fff;">${needs.water_litres || 0} Litres</div>
+          </div>
+          <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); padding: 10px; border-radius: 8px;">
+            <span style="color: #f59e0b;">Food Packs</span>
+            <div style="font-size: 15px; font-weight: 700; color: #fff;">${needs.food_rations || 0} Rations</div>
+          </div>
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 10px; border-radius: 8px;">
+            <span style="color: #ef4444;">Medical Kits</span>
+            <div style="font-size: 15px; font-weight: 700; color: #fff;">${needs.medical_kits || 0} Kits</div>
+          </div>
+          <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 10px; border-radius: 8px;">
+            <span style="color: #10b981;">Ambulances</span>
+            <div style="font-size: 15px; font-weight: 700; color: #fff;">${needs.ambulances ? '1 Requested' : 'None'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chronological Lifecycle Milestones Timeline -->
+      <div style="margin-bottom: 20px;">
+        <h5 style="font-size: 13px; color: #a78bfa; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+          <i class="ph-fill ph-git-commit"></i> Request Lifecycle Audit Trail
+        </h5>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          ${timeline.map(item => {
+            const isDoneStep = item.status === 'COMPLETED';
+            const isRejStep = item.status === 'REJECTED';
+            const isInProg = item.status === 'IN_PROGRESS';
+            const dotColor = isDoneStep ? '#10b981' : (isRejStep ? '#ef4444' : (isInProg ? '#a78bfa' : '#64748b'));
+
+            return `
+              <div style="display: flex; gap: 14px; position: relative;">
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                  <div style="width: 24px; height: 24px; border-radius: 50%; background: ${dotColor}; color: #000; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">
+                    ${isDoneStep ? '✓' : (isRejStep ? '✕' : item.step)}
+                  </div>
+                  <div style="width: 2px; height: calc(100% - 24px); background: rgba(255,255,255,0.1); margin-top: 4px;"></div>
+                </div>
+                <div style="flex: 1; padding-bottom: 8px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="color: #fff; font-size: 13px;">${item.title}</strong>
+                    <span style="font-size: 11px; color: var(--text-dim);">${item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : 'Pending'}</span>
+                  </div>
+                  <p style="font-size: 12px; color: var(--text-secondary); margin: 3px 0 0 0;">${item.description}</p>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    // Footer Action Buttons inside Modal
+    if (footer) {
+      footer.innerHTML = `
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          ${!isDone && !isRej ? `
+            ${!isVer ? `
+              <button class="btn-dispatch" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981;" onclick="verifyIncident('${inc.id}', 'ACCEPT')">
+                <i class="ph-fill ph-check"></i> Accept Request
+              </button>
+              <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444;" onclick="verifyIncident('${inc.id}', 'REJECT')">
+                <i class="ph-fill ph-x"></i> Reject
+              </button>
+            ` : `
+              <button class="btn-dispatch" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; font-weight: 600;" onclick="verifyIncident('${inc.id}', 'DONE')">
+                <i class="ph-fill ph-check-circle"></i> Mark as Done
+              </button>
+              <button class="btn-dispatch" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa;" onclick="openHumanApprovalModal('${inc.id}')">
+                <i class="ph-fill ph-brain"></i> AI Allocation (OR-Tools)
+              </button>
+              <button class="btn-dispatch" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444;" onclick="verifyIncident('${inc.id}', 'REJECT')">
+                <i class="ph-fill ph-x"></i> Reject
+              </button>
+            `}
+          ` : `
+            <button class="btn-dispatch" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid #64748b;" onclick="verifyIncident('${inc.id}', 'REOPEN')">
+              <i class="ph ph-arrow-counter-clockwise"></i> Re-Open Triage
+            </button>
+          `}
+        </div>
+        <div>
+          <button class="btn-dispatch" onclick="document.getElementById('trackRequestModal').style.display = 'none'" style="background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+            Close
+          </button>
+        </div>
+      `;
+    }
+
+  } catch (err) {
+    content.innerHTML = `<div style="color: var(--red); padding: 20px;">Error loading tracking telemetry: ${err.message}</div>`;
   }
 };
 
@@ -3318,6 +3655,47 @@ function bindNewArchitectureHandlers() {
   document.getElementById('closeHumanApprovalModalBtn')?.addEventListener('click', () => {
     document.getElementById('humanApprovalModal').style.display = 'none';
   });
+
+  // Incident Manager Filter Tabs
+  document.querySelectorAll('#imFilterContainer .im-tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('#imFilterContainer .im-tab-btn').forEach(b => b.classList.remove('active'));
+      const targetBtn = e.currentTarget;
+      targetBtn.classList.add('active');
+      currentImFilter = targetBtn.dataset.imFilter || 'ALL';
+      loadIncidentManagerFeed();
+    });
+  });
+
+  // Incident Manager Live Search
+  const searchInput = document.getElementById('incidentSearchInput');
+  if (searchInput) {
+    let debounceTimer;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        currentImSearch = e.target.value;
+        loadIncidentManagerFeed();
+      }, 200);
+    });
+  }
+
+  // Tracking Modal Close Handlers
+  document.getElementById('closeTrackRequestModalBtn')?.addEventListener('click', () => {
+    const modal = document.getElementById('trackRequestModal');
+    if (modal) modal.style.display = 'none';
+    activeTrackingIncidentId = null;
+  });
+
+  const trackModal = document.getElementById('trackRequestModal');
+  if (trackModal) {
+    trackModal.addEventListener('click', (e) => {
+      if (e.target === trackModal) {
+        trackModal.style.display = 'none';
+        activeTrackingIncidentId = null;
+      }
+    });
+  }
 }
 
 // Call binding once DOM is ready

@@ -467,31 +467,160 @@ router.patch('/:id/triage', optionalAuthenticate, async (req, res) => {
   }
 });
 
-// PATCH /api/incidents/:id/verify - Admin / Incident Manager Verification Workflow (Week 4 Gate)
-// Verifies or rejects incoming disaster incidents before allowing AI allocation
+// GET /api/incidents/:id/tracking - Detailed Individual Request Tracking
+router.get('/:id/tracking', optionalAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const incident = await prisma.incident.findFirst({
+      where: {
+        OR: [
+          { id },
+          { incidentNumber: id }
+        ]
+      },
+      include: {
+        reporter: {
+          select: { id: true, name: true, phone: true, agency: true, role: true }
+        },
+        assignments: {
+          include: {
+            responder: true,
+            assignedByCoordinator: { select: { id: true, name: true, badgeNumber: true } }
+          },
+          orderBy: { assignedAt: 'desc' }
+        },
+        locationLogs: {
+          orderBy: { timestamp: 'desc' },
+          take: 20
+        },
+        chatMessages: {
+          orderBy: { createdAt: 'desc' },
+          take: 30
+        }
+      }
+    });
+
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident request not found.' });
+    }
+
+    // Build timeline milestones for tracking
+    const timeline = [
+      {
+        step: 1,
+        title: 'Emergency Request Reported',
+        description: `Submitted by ${incident.reporter?.name || incident.reporterContact || 'Citizen SOS'} (${incident.type} emergency)`,
+        timestamp: incident.reportedAt,
+        status: 'COMPLETED'
+      },
+      {
+        step: 2,
+        title: incident.verificationStatus === 'REJECTED' ? 'Request Rejected' : 'Incident Triage & Verification',
+        description: incident.verificationStatus === 'REJECTED'
+          ? `Rejected: ${incident.managerNotes || 'Marked invalid/duplicate'}`
+          : (incident.verificationStatus === 'VERIFIED'
+              ? `Accepted & verified by Incident Manager (${incident.managerNotes || 'Valid emergency'})`
+              : 'Pending verification by Incident Manager'),
+        timestamp: incident.verifiedAt,
+        status: incident.verificationStatus === 'VERIFIED' ? 'COMPLETED' : (incident.verificationStatus === 'REJECTED' ? 'REJECTED' : 'PENDING')
+      },
+      {
+        step: 3,
+        title: 'Mission Dispatch & Resource En Route',
+        description: incident.assignments.length > 0
+          ? `Assigned to ${incident.assignments[0].responder?.name || 'Emergency Unit'} (${incident.assignments[0].responder?.callsign || 'UNIT'})`
+          : 'Awaiting Coordinator / Admin HITL mission dispatch',
+        timestamp: incident.assignments[0]?.assignedAt || null,
+        status: incident.assignments.length > 0 ? (incident.status === 'RESOLVED' ? 'COMPLETED' : 'IN_PROGRESS') : 'PENDING'
+      },
+      {
+        step: 4,
+        title: 'Mission Resolved & Done',
+        description: incident.status === 'RESOLVED'
+          ? `Marked as Done. Scene cleared and casualties aided.`
+          : 'Final resolution pending field completion',
+        timestamp: incident.resolvedAt,
+        status: incident.status === 'RESOLVED' ? 'COMPLETED' : 'PENDING'
+      }
+    ];
+
+    res.json({
+      incident,
+      timeline,
+      trackingNumber: incident.incidentNumber,
+      currentStatus: incident.status,
+      verificationStatus: incident.verificationStatus
+    });
+  } catch (err) {
+    console.error('Error fetching incident tracking:', err);
+    res.status(500).json({ error: 'Failed to retrieve tracking telemetry.' });
+  }
+});
+
+// PATCH /api/incidents/:id/verify - Admin / Incident Manager Verification & Lifecycle Workflow
+// Handles ACCEPT, REJECT, DONE (Mark as Done), and REOPEN actions for individual requests
 router.patch('/:id/verify', optionalAuthenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, notes } = req.body; // action: 'VERIFY' | 'REJECT' | 'REQUEST_INFO'
+    const { action, notes } = req.body; // action: 'VERIFY' | 'ACCEPT' | 'REJECT' | 'DONE' | 'RESOLVE' | 'REOPEN' | 'PENDING'
 
-    const incident = await prisma.incident.findUnique({ where: { id } });
+    const incident = await prisma.incident.findFirst({
+      where: {
+        OR: [
+          { id },
+          { incidentNumber: id }
+        ]
+      }
+    });
     if (!incident) return res.status(404).json({ error: 'Incident not found.' });
 
     const upperAction = (action || 'VERIFY').toUpperCase();
-    const isVerified = upperAction === 'VERIFY';
-    const isRejected = upperAction === 'REJECT';
+    const isAccept = upperAction === 'VERIFY' || upperAction === 'ACCEPT';
+    const isReject = upperAction === 'REJECT';
+    const isDone = upperAction === 'DONE' || upperAction === 'RESOLVE';
+    const isReopen = upperAction === 'REOPEN' || upperAction === 'PENDING';
 
-    const updateData = {
-      verificationStatus: isVerified ? 'VERIFIED' : (isRejected ? 'REJECTED' : 'PENDING'),
-      verifiedAt: new Date(),
-      verifiedBy: req.user?.id || 'admin-root',
-      status: isVerified ? 'TRIAGED' : (isRejected ? 'CANCELLED' : incident.status)
-    };
+    const updateData = {};
 
-    if (notes) updateData.managerNotes = notes;
+    if (isAccept) {
+      updateData.verificationStatus = 'VERIFIED';
+      updateData.verifiedAt = new Date();
+      updateData.verifiedBy = req.user?.name || req.user?.id || 'Incident Manager';
+      if (['REPORTED', 'CANCELLED'].includes(incident.status)) {
+        updateData.status = 'TRIAGED';
+      }
+      if (notes) updateData.managerNotes = notes;
+    } else if (isReject) {
+      updateData.verificationStatus = 'REJECTED';
+      updateData.status = 'CANCELLED';
+      updateData.managerNotes = notes || 'Request rejected by Incident Manager';
+    } else if (isDone) {
+      updateData.status = 'RESOLVED';
+      updateData.resolvedAt = new Date();
+      updateData.locationSharingActive = false;
+      if (notes) updateData.managerNotes = notes;
+
+      // Release any active responder units assigned to this incident
+      const activeAssignments = await prisma.assignment.findMany({ where: { incidentId: incident.id } });
+      for (const a of activeAssignments) {
+        await prisma.responder.update({
+          where: { id: a.responderId },
+          data: { status: 'AVAILABLE', currentIncidentId: null, lastStatusUpdate: new Date() }
+        }).catch(() => {});
+        await prisma.assignment.update({
+          where: { id: a.id },
+          data: { status: 'COMPLETED', completedAt: new Date() }
+        }).catch(() => {});
+      }
+    } else if (isReopen) {
+      updateData.verificationStatus = 'PENDING';
+      updateData.status = 'REPORTED';
+      updateData.resolvedAt = null;
+      if (notes) updateData.managerNotes = notes;
+    }
 
     const updated = await prisma.incident.update({
-      where: { id },
+      where: { id: incident.id },
       data: updateData,
       include: {
         assignments: { include: { responder: true } },
@@ -503,21 +632,51 @@ router.patch('/:id/verify', optionalAuthenticate, async (req, res) => {
     if (io) {
       wsBroadcaster.notifyIncidentUpdated(io, updated);
       io.to('coordinators').emit('incident:verified', {
-        incidentId: id,
+        incidentId: incident.id,
         incidentNumber: updated.incidentNumber,
-        status: updated.verificationStatus,
-        notes: notes || 'Incident verified by Administrator.'
+        action: upperAction,
+        status: updated.status,
+        verificationStatus: updated.verificationStatus,
+        notes: notes || `Request marked as ${upperAction} by Incident Manager.`
+      });
+      io.emit('incident:status', {
+        incidentId: incident.id,
+        status: updated.status,
+        incidentStatus: updated.status
       });
     }
 
+    // Record Audit Log
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id || null,
+        action: `INCIDENT_ACTION_${upperAction}`,
+        resourceType: 'INCIDENT',
+        resourceId: incident.id,
+        details: JSON.stringify({
+          incidentNumber: updated.incidentNumber,
+          action: upperAction,
+          status: updated.status,
+          verificationStatus: updated.verificationStatus,
+          notes
+        })
+      }
+    }).catch(() => {});
+
     res.json({
-      message: `Incident ${updated.incidentNumber} ${updated.verificationStatus.toLowerCase()} successfully.`,
+      message: `Incident request ${updated.incidentNumber} marked as ${upperAction} successfully.`,
       incident: updated
     });
   } catch (err) {
-    console.error('Error verifying incident:', err);
-    res.status(500).json({ error: 'Failed to verify incident.' });
+    console.error('Error executing incident action:', err);
+    res.status(500).json({ error: 'Failed to process incident action.' });
   }
+});
+
+// Alias: POST /api/incidents/:id/action
+router.post('/:id/action', optionalAuthenticate, async (req, res) => {
+  req.method = 'PATCH';
+  return router.handle(req, res);
 });
 
 // DELETE /api/incidents/:id - Incident Manager / Admin removes false alarms or resolved incidents
