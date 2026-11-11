@@ -95,19 +95,29 @@ export function initializeWebSocket(io) {
     });
 
     
-    // 5. Admin 3-Channel Communication Rooms (Diagram 2)
-    // channels: CHANNEL_1_RESOURCE, CHANNEL_2_INCIDENT, CHANNEL_3_RESPONDER
+    // 5. Admin Topology Communication Rooms (Diagram 2)
+    // Isolated Channels: CHANNEL_1_RESOURCE, CHANNEL_2_INCIDENT
     const handleJoinChannel = (data) => {
       const channelName = typeof data === 'string' ? data : (data?.channel || data?.room);
       if (!channelName) return;
       const cleanName = channelName.startsWith('channel:') ? channelName : `channel:${channelName.toUpperCase()}`;
       socket.join(cleanName);
-      console.log(`💬 Socket ${socket.id} joined admin channel '${cleanName}'`);
+      console.log(`💬 Socket ${socket.id} joined channel '${cleanName}'`);
       socket.emit('channel:joined', { room: cleanName, channel: cleanName.replace('channel:', '') });
+    };
+
+    const handleLeaveChannel = (data) => {
+      const channelName = typeof data === 'string' ? data : (data?.channel || data?.room);
+      if (!channelName) return;
+      const cleanName = channelName.startsWith('channel:') ? channelName : `channel:${channelName.toUpperCase()}`;
+      socket.leave(cleanName);
+      console.log(`👋 Socket ${socket.id} left channel '${cleanName}'`);
     };
 
     socket.on('channel:join', handleJoinChannel);
     socket.on('join:channel', handleJoinChannel);
+    socket.on('channel:leave', handleLeaveChannel);
+    socket.on('leave:channel', handleLeaveChannel);
 
     socket.on('channel:send', async (data) => {
       const channel = data?.channel || data?.channelId;
@@ -126,10 +136,8 @@ export function initializeWebSocket(io) {
           }
         });
         const room = `channel:${normChannel}`;
+        // Strict Channel Isolation: Broadcast ONLY to the specific channel room
         io.to(room).emit('channel:message', saved);
-        io.to('coordinators').emit('channel:message', saved);
-        io.emit('channel:message', saved);
-        io.emit('chat:message', saved);
       } catch (e) {
         console.error('Channel send error:', e);
       }

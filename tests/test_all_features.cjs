@@ -153,49 +153,50 @@ async function runAllTests() {
   }
 
   // -----------------------------------------------------------------
-  // 3. COMMUNICATION CHANNEL TEST
+  // 3. COMMUNICATION CHANNEL TEST (STRICT 2-CHANNEL ISOLATION)
   // -----------------------------------------------------------------
   console.log('\n---------------------------------------------------------------');
-  console.log('💬 TEST 3: REAL-TIME COMMUNICATION CHANNELS (3-CHANNEL HUB)');
+  console.log('💬 TEST 3: REAL-TIME COMMUNICATION (STRICT 2-CHANNEL ISOLATION)');
   console.log('---------------------------------------------------------------');
 
   try {
-    const socket = io(BASE_URL, {
-      transports: ['websocket'],
-      reconnection: false
+    const socketCh1 = io(BASE_URL, { transports: ['websocket'], reconnection: false });
+    const socketCh2 = io(BASE_URL, { transports: ['websocket'], reconnection: false });
+
+    await Promise.all([
+      new Promise(res => {
+        socketCh1.on('connect', () => {
+          socketCh1.emit('channel:join', { channel: 'CHANNEL_1_RESOURCE' });
+          res();
+        });
+      }),
+      new Promise(res => {
+        socketCh2.on('connect', () => {
+          socketCh2.emit('channel:join', { channel: 'CHANNEL_2_INCIDENT' });
+          res();
+        });
+      })
+    ]);
+    assert(true, 'Both Channel 1 and Channel 2 sockets connected and joined respective rooms');
+
+    // Socket 1 listens for messages on Channel 1
+    let ch2ReceivedLeak = false;
+    socketCh2.on('channel:message', () => {
+      ch2ReceivedLeak = true;
     });
 
-    await new Promise((resolveSocket) => {
-      socket.on('connect', () => {
-        assert(true, 'Socket.io client connected to real-time gateway');
-        socket.emit('join:channel', 'CHANNEL_1_RESOURCE');
-        socket.emit('join:channel', 'CHANNEL_2_INCIDENT');
-        socket.emit('join:channel', 'CHANNEL_3_RESPONDER');
-        resolveSocket();
-      });
-      socket.on('connect_error', (err) => {
-        assert(false, `Socket connection error: ${err.message}`);
-        resolveSocket();
-      });
-    });
-
-    // Listen for incoming channel broadcast
-    const channelPromise = new Promise((resolveMsg) => {
-      const timeout = setTimeout(() => {
-        resolveMsg(null);
-      }, 4000);
-
-      socket.on('channel:message', (payload) => {
+    const ch1Promise = new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(null), 3000);
+      socketCh1.on('channel:message', (msg) => {
         clearTimeout(timeout);
-        resolveMsg(payload);
+        resolve(msg);
       });
     });
 
-    // Give socket room join 100ms to register
     await new Promise(r => setTimeout(r, 100));
 
-    // Post message to CHANNEL_1_RESOURCE
-    const testMsgText = `Automated Channel Test - Dispatch Sync at ${new Date().toISOString()}`;
+    // Send message to CHANNEL_1_RESOURCE
+    const testMsgText = `Isolated Ch1 Sync - ${Date.now()}`;
     const postMsgRes = await request('POST', '/api/chat/channel/CHANNEL_1_RESOURCE', {
       message: testMsgText,
       senderRole: 'RESOURCE_MANAGER',
@@ -203,15 +204,24 @@ async function runAllTests() {
     });
     assert(postMsgRes.status === 201, 'Send message to CHANNEL_1_RESOURCE');
 
-    const receivedPayload = await channelPromise;
-    assert(receivedPayload && (receivedPayload.message === testMsgText || receivedPayload.text === testMsgText), 'Real-time WebSocket received broadcast on channel');
+    const receivedPayload = await ch1Promise;
+    assert(receivedPayload && receivedPayload.message === testMsgText && receivedPayload.channel === 'CHANNEL_1_RESOURCE', 'Channel 1 subscriber received targeted broadcast');
 
-    // Verify chat history persistence
-    const histRes = await request('GET', '/api/chat/channel/CHANNEL_1_RESOURCE');
-    const msgFound = histRes.data.messages?.some(m => m.message === testMsgText || m.text === testMsgText);
-    assert(msgFound, 'Message persisted in channel history database');
+    // Wait briefly and verify Channel 2 DID NOT receive it (zero cross-channel leakage)
+    await new Promise(r => setTimeout(r, 200));
+    assert(!ch2ReceivedLeak, 'Channel 2 subscriber received 0 messages (strict channel isolation verified)');
 
-    socket.disconnect();
+    // Verify chat history persistence in Channel 1 and absence in Channel 2
+    const histResCh1 = await request('GET', '/api/chat/channel/CHANNEL_1_RESOURCE');
+    const msgFoundInCh1 = histResCh1.data.messages?.some(m => m.message === testMsgText);
+    assert(msgFoundInCh1, 'Message persisted in Channel 1 history');
+
+    const histResCh2 = await request('GET', '/api/chat/channel/CHANNEL_2_INCIDENT');
+    const msgLeakedInCh2 = histResCh2.data.messages?.some(m => m.message === testMsgText);
+    assert(!msgLeakedInCh2, 'Message absent from Channel 2 history (database channel isolation verified)');
+
+    socketCh1.disconnect();
+    socketCh2.disconnect();
 
   } catch (err) {
     assert(false, `Communication channel exception: ${err.message}`);

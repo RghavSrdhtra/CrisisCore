@@ -179,9 +179,8 @@ router.post('/channel/:channelName', optionalAuthenticate, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
+      // Strict Channel Isolation: Emit ONLY to the specific channel room
       io.to(`channel:${channelName.toUpperCase()}`).emit('channel:message', saved);
-      io.emit('channel:message', saved);
-      io.emit('chat:message', saved);
     }
 
     res.status(201).json({ message: 'Channel message sent.', chatMessage: saved });

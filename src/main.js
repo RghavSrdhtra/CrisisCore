@@ -781,13 +781,13 @@ function closeMobileSidebar() {
   if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
 }
 
-// Master Blueprint Role-Based Access Control (RBAC) Matrix
+// Master Blueprint Role-Based Access Control (RBAC) Matrix (3-Tier Blueprint)
 const ROLE_TIER_PERMISSIONS = {
   ADMIN: {
     allowedViews: ['dashboard', 'resourceManager', 'incidentManager', 'adminChannels', 'responder', 'map', 'fleet', 'audit'],
     defaultView: 'dashboard',
     visibleNavIds: ['navCommandCenter', 'navResourceManager', 'navIncidentManager', 'navAdminChannels', 'navResponderTerminal', 'navFullMap', 'navFleet', 'navAuditLogs'],
-    allowedChannels: ['CHANNEL_1_RESOURCE', 'CHANNEL_2_INCIDENT', 'CHANNEL_3_RESPONDER']
+    allowedChannels: ['CHANNEL_1_RESOURCE', 'CHANNEL_2_INCIDENT']
   },
   RESOURCE_MANAGER: {
     allowedViews: ['resourceManager', 'adminChannels'],
@@ -805,7 +805,7 @@ const ROLE_TIER_PERMISSIONS = {
     allowedViews: ['responder'],
     defaultView: 'responder',
     visibleNavIds: ['navResponderTerminal'],
-    allowedChannels: ['CHANNEL_3_RESPONDER']
+    allowedChannels: []
   }
 };
 
@@ -935,15 +935,13 @@ function applyRolePrivileges(user) {
   // 3. Strict Admin Communication Channels Isolation (Diagram 2)
   const btnCh1 = document.getElementById('btnAdminCh1');
   const btnCh2 = document.getElementById('btnAdminCh2');
-  const btnCh3 = document.getElementById('btnAdminCh3');
 
   if (btnCh1) btnCh1.style.display = config.allowedChannels.includes('CHANNEL_1_RESOURCE') ? 'flex' : 'none';
   if (btnCh2) btnCh2.style.display = config.allowedChannels.includes('CHANNEL_2_INCIDENT') ? 'flex' : 'none';
-  if (btnCh3) btnCh3.style.display = config.allowedChannels.includes('CHANNEL_3_RESPONDER') ? 'flex' : 'none';
 
   // Lock active channel to permitted channel
   if (!config.allowedChannels.includes(currentAdminChannel)) {
-    currentAdminChannel = config.allowedChannels[0];
+    currentAdminChannel = config.allowedChannels[0] || 'CHANNEL_1_RESOURCE';
   }
 
   // 4. Strict Mobile Bottom Navigation Filtering
@@ -2378,50 +2376,56 @@ function initSocket() {
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Gateway:', socket.id);
       socket.emit('join:coordinator');
-      socket.emit('channel:join', { channel: 'CHANNEL_1_RESOURCE' });
-      socket.emit('channel:join', { channel: 'CHANNEL_2_INCIDENT' });
-      socket.emit('channel:join', { channel: 'CHANNEL_3_RESPONDER' });
+      if (currentAdminChannel) {
+        socket.emit('channel:join', { channel: currentAdminChannel });
+      }
       if (currentUser?.role === 'RESPONDER') {
         socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
       }
     });
 
-    // 0. Dedicated Topology Communication Channels (Diagram 2)
+    // 0. Dedicated Topology Communication Channels (Strict Channel Isolation)
     socket.on('channel:message', (newMsg) => {
       console.log('💬 Direct topology channel message received:', newMsg);
-      if (newMsg.channel && currentAdminChannel && newMsg.channel.toUpperCase() === currentAdminChannel.toUpperCase()) {
-        const stream = document.getElementById('adminChannelChatStream');
-        if (stream) {
-          if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
-          const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
+      if (!newMsg || !newMsg.channel || !currentAdminChannel) return;
+      // Strict Channel Guard: Do not display messages intended for another channel!
+      if (newMsg.channel.toUpperCase() !== currentAdminChannel.toUpperCase()) {
+        return;
+      }
 
-          // Deduplicate if already optimistically appended
-          if (isSelf) {
-            const untagged = stream.querySelectorAll('.chat-msg.self:not([data-msg-id])');
-            if (untagged.length > 0) {
-              const last = untagged[untagged.length - 1];
-              if (last.querySelector('.chat-bubble')?.textContent === newMsg.message) {
-                if (newMsg.id) last.setAttribute('data-msg-id', newMsg.id);
-                return;
-              }
-            }
+      const stream = document.getElementById('adminChannelChatStream');
+      if (!stream) return;
+      if (stream.getAttribute('data-active-channel') !== currentAdminChannel) return;
+
+      if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
+      const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
+
+      // Deduplicate if already optimistically appended
+      if (isSelf) {
+        const untagged = stream.querySelectorAll('.chat-msg.self:not([data-msg-id])');
+        if (untagged.length > 0) {
+          const last = untagged[untagged.length - 1];
+          if (last.querySelector('.chat-bubble')?.textContent === newMsg.message) {
+            if (newMsg.id) last.setAttribute('data-msg-id', newMsg.id);
+            return;
           }
-
-          const hint = stream.querySelector('.chat-empty-hint');
-          if (hint) hint.remove();
-          const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const msgEl = document.createElement('div');
-          msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
-          if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
-          msgEl.innerHTML = `
-            <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
-            <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
-            <div class="chat-time">${time}</div>
-          `;
-          stream.appendChild(msgEl);
-          stream.scrollTop = stream.scrollHeight;
         }
       }
+
+      const hint = stream.querySelector('.chat-empty-hint');
+      if (hint) hint.remove();
+      const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const msgEl = document.createElement('div');
+      msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+      if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
+      msgEl.setAttribute('data-channel', newMsg.channel);
+      msgEl.innerHTML = `
+        <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
+        <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
+        <div class="chat-time">${time}</div>
+      `;
+      stream.appendChild(msgEl);
+      stream.scrollTop = stream.scrollHeight;
     });
 
     // Resource Manager Real-Time Stock Updates
@@ -3320,12 +3324,13 @@ window.triggerAllocationWithGate = async (incidentDbId, status) => {
   window.openHumanApprovalModal(incidentDbId);
 };
 
-// --- 3. Admin 3-Channel Communication Hub (Diagram 2) ---
+// --- 3. Topology Communication Hub: Resource & Incident Channels (Diagram 2) ---
 async function loadAdminChannel(channelName) {
   const role = currentUser?.role || 'ADMIN';
   const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
   const targetChannel = channelName || config.allowedChannels[0] || 'CHANNEL_1_RESOURCE';
-  currentAdminChannel = config.allowedChannels.includes(targetChannel) ? targetChannel : config.allowedChannels[0];
+  const previousChannel = currentAdminChannel;
+  currentAdminChannel = config.allowedChannels.includes(targetChannel) ? targetChannel : (config.allowedChannels[0] || 'CHANNEL_1_RESOURCE');
 
   const stream = document.getElementById('adminChannelChatStream');
   const title = document.getElementById('activeAdminChannelTitle');
@@ -3339,29 +3344,35 @@ async function loadAdminChannel(channelName) {
   if (currentAdminChannel === 'CHANNEL_1_RESOURCE') {
     if (title) title.innerHTML = '<i class="ph-fill ph-package" style="color: #38bdf8;"></i> Channel 1: Admin ↔ Resource Manager (Elena Rostova)';
     if (sub) sub.textContent = 'Relief depot inventory quotas, supply replenishments, and warehouse audits.';
-  } else if (currentAdminChannel === 'CHANNEL_2_INCIDENT') {
+  } else {
     if (title) title.innerHTML = '<i class="ph-fill ph-clipboard-text" style="color: #a78bfa;"></i> Channel 2: Admin ↔ Incident Manager (Dr. Tariq)';
     if (sub) sub.textContent = 'Incident severity triage verification, casualty count adjustments, and resource need escalations.';
-  } else {
-    if (title) title.innerHTML = '<i class="ph-fill ph-ambulance" style="color: #f59e0b;"></i> Channel 3: Admin ↔ Field Responders (Carlos Vance)';
-    if (sub) sub.textContent = 'Direct tactical mission orders, route sequence deviations, and field delivery confirmations.';
   }
 
+  // Socket room switch: leave previous channel and join current channel
   if (socket && socket.connected) {
+    if (previousChannel && previousChannel !== currentAdminChannel) {
+      socket.emit('channel:leave', { channel: previousChannel });
+    }
     socket.emit('channel:join', { channel: currentAdminChannel });
   }
 
   if (stream) {
-    if (stream.children.length === 0) {
-      stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 20px;">Connecting to channel...</div>';
-    }
+    // Tag active channel on DOM element and clear immediately so old channel messages never persist
+    stream.setAttribute('data-active-channel', currentAdminChannel);
+    stream.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 24px;"><i class="ph ph-spinner ph-spin" style="font-size: 20px;"></i><p style="margin-top: 6px;">Loading ' + (currentAdminChannel === 'CHANNEL_1_RESOURCE' ? 'Resource Manager' : 'Incident Manager') + ' line...</p></div>';
+
     try {
-      const res = await fetch(`/api/chat/channel/${currentAdminChannel}`);
+      const res = await fetch(`/api/chat/channel/${currentAdminChannel}?_t=${Date.now()}`);
       if (!res.ok) throw new Error('Failed to load channel messages');
       const data = await res.json();
-      renderChatStream(stream, data.messages || [], currentUser ? currentUser.name : 'Central Command');
+      // Ensure user hasn't switched away while request was in-flight
+      if (stream.getAttribute('data-active-channel') === currentAdminChannel) {
+        const filtered = (data.messages || []).filter(m => (m.channel || '').toUpperCase() === currentAdminChannel.toUpperCase());
+        renderChatStream(stream, filtered, currentUser ? currentUser.name : 'Central Command');
+      }
     } catch (e) {
-      if (stream.children.length === 0) {
+      if (stream.getAttribute('data-active-channel') === currentAdminChannel) {
         stream.innerHTML = '<div class="chat-empty-hint">Direct topology channel online. Transmit instructions below.</div>';
       }
     }
@@ -3592,10 +3603,9 @@ function bindNewArchitectureHandlers() {
   document.getElementById('quickReplenishFoodBtn')?.addEventListener('click', () => quickReplenishResource('FOOD', 50));
   document.getElementById('quickReplenishMedsBtn')?.addEventListener('click', () => quickReplenishResource('MEDICINE', 10));
 
-  // Admin channel tabs
+  // Admin channel tabs (Resource Manager & Incident Manager)
   document.getElementById('btnAdminCh1')?.addEventListener('click', () => loadAdminChannel('CHANNEL_1_RESOURCE'));
   document.getElementById('btnAdminCh2')?.addEventListener('click', () => loadAdminChannel('CHANNEL_2_INCIDENT'));
-  document.getElementById('btnAdminCh3')?.addEventListener('click', () => loadAdminChannel('CHANNEL_3_RESPONDER'));
 
   // Admin channel message form
   const admForm = document.getElementById('adminChannelChatForm');
@@ -3607,22 +3617,24 @@ function bindNewArchitectureHandlers() {
       if (!text) return;
       input.value = '';
 
+      const targetCh = currentAdminChannel;
       const payload = {
-        channel: currentAdminChannel,
+        channel: targetCh,
         message: text,
         senderName: currentUser ? currentUser.name : 'Central Command',
         senderRole: currentUser ? currentUser.role : 'ADMIN',
         senderId: currentUser ? currentUser.id : null
       };
 
-      // 1. Instant optimistic append for zero-latency UI
+      // 1. Instant optimistic append for zero-latency UI strictly tagged with active channel
       const stream = document.getElementById('adminChannelChatStream');
-      if (stream) {
+      if (stream && stream.getAttribute('data-active-channel') === targetCh) {
         const hint = stream.querySelector('.chat-empty-hint');
         if (hint) hint.remove();
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg self';
+        msgEl.setAttribute('data-channel', targetCh);
         msgEl.innerHTML = `
           <div class="chat-sender">${escapeHtml(payload.senderName)} (${escapeHtml(payload.senderRole)})</div>
           <div class="chat-bubble">${escapeHtml(payload.message)}</div>
