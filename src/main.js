@@ -1,6 +1,6 @@
 import './style.css';
 import { io } from 'socket.io-client';
-import { getApiBase } from './apiConfig.js';
+import { getApiBase, setApiGateway, DEFAULT_HOST_IP, DEFAULT_PORT } from './apiConfig.js';
 
 // --- State Management ---
 let socket = null;
@@ -762,11 +762,7 @@ function updateUserUI(user) {
   switchView(targetConfig.defaultView);
 
   if (socket && socket.connected) {
-    if (user.role === 'COORDINATOR' || user.role === 'ADMIN' || user.role === 'RESOURCE_MANAGER' || user.role === 'INCIDENT_MANAGER') {
-      socket.emit('join:coordinator');
-    } else if (user.role === 'RESPONDER') {
-      socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
-    }
+    joinAuthorizedChannels();
   }
 }
 
@@ -2384,64 +2380,164 @@ function setupAuthUI() {
   if (sidebarLogoutBtn) sidebarLogoutBtn.onclick = handleLogout;
 }
 
+// --- WebSocket Real-Time Gateway & Channel Room Subscriptions ---
+function joinAuthorizedChannels() {
+  if (!socket || !socket.connected) return;
+
+  const role = currentUser?.role || 'ADMIN';
+  const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
+  const channels = config.allowedChannels || ['CHANNEL_1_RESOURCE', 'CHANNEL_2_INCIDENT'];
+
+  console.log(`📡 Subscribing socket to authorized topology channels for ${role}:`, channels);
+  channels.forEach(ch => {
+    socket.emit('channel:join', { channel: ch });
+  });
+
+  if (['COORDINATOR', 'ADMIN', 'RESOURCE_MANAGER', 'INCIDENT_MANAGER'].includes(role)) {
+    socket.emit('join:coordinator');
+  }
+  if (role === 'RESPONDER') {
+    socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
+  }
+}
+
+function updateGatewayStatusUI(connected) {
+  const dot = document.getElementById('gatewayStatusDot');
+  const label = document.getElementById('gatewayStatusLabel');
+  const authDot = document.getElementById('authGatewayDot');
+  const authLabel = document.getElementById('authGatewayLabel');
+
+  const base = getApiBase() || `${window.location.hostname || 'localhost'}:3001`;
+  const cleanBase = base.replace(/^https?:\/\//, '');
+
+  if (dot) dot.className = `pulse-dot ${connected ? 'green' : 'red'}`;
+  if (label) {
+    label.textContent = cleanBase;
+    label.title = connected ? `Connected to Gateway: ${base}` : `Gateway Disconnected (${base})`;
+  }
+  if (authDot) authDot.className = `pulse-dot ${connected ? 'green' : 'red'}`;
+  if (authLabel) authLabel.textContent = cleanBase;
+}
+
 // --- WebSocket Real-Time Listener ---
 function initSocket() {
   try {
-    socket = io(getApiBase() || undefined);
+    socket = io(getApiBase() || undefined, {
+      reconnection: true,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 1000
+    });
 
     socket.on('connect', () => {
       console.log('📡 Connected to CrisisCore Gateway:', socket.id);
-      socket.emit('join:coordinator');
-      if (currentAdminChannel) {
-        socket.emit('channel:join', { channel: currentAdminChannel });
-      }
-      if (currentUser?.role === 'RESPONDER') {
-        socket.emit('join:responder', { responderId: '3084912b-5bdc-4fd3-87bb-fb89a96d50fd' });
-      }
+      updateGatewayStatusUI(true);
+      joinAuthorizedChannels();
     });
 
-    // 0. Dedicated Topology Communication Channels (Strict Channel Isolation)
+    socket.on('disconnect', () => {
+      console.warn('❌ Disconnected from CrisisCore Gateway');
+      updateGatewayStatusUI(false);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn('⚠️ Gateway connection error:', err.message);
+      updateGatewayStatusUI(false);
+    });
+
+    // 0. Dedicated Topology Communication Channels (Strict Channel Isolation with Cross-Device Sync)
     socket.on('channel:message', (newMsg) => {
       console.log('💬 Direct topology channel message received:', newMsg);
-      if (!newMsg || !newMsg.channel || !currentAdminChannel) return;
-      // Strict Channel Guard: Do not display messages intended for another channel!
-      if (newMsg.channel.toUpperCase() !== currentAdminChannel.toUpperCase()) {
-        return;
-      }
+      if (!newMsg || !newMsg.channel) return;
 
+      const msgChannel = (newMsg.channel || '').toUpperCase();
       const stream = document.getElementById('adminChannelChatStream');
-      if (!stream) return;
-      if (stream.getAttribute('data-active-channel') !== currentAdminChannel) return;
+      const isAdmViewActive = document.getElementById('adminChannelsView')?.style.display !== 'none';
+      const isCurrentChannel = currentAdminChannel && (msgChannel === currentAdminChannel.toUpperCase());
+      const isSelf = (currentUser && newMsg.senderName === currentUser.name) || (currentUser && newMsg.senderRole === currentUser.role);
 
-      if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
-      const isSelf = (currentUser && newMsg.senderName === currentUser.name) || newMsg.senderRole === currentUser?.role;
+      // A. Active View Match: If user is actively looking at this specific channel right now:
+      if (isCurrentChannel && isAdmViewActive && stream && stream.getAttribute('data-active-channel') === currentAdminChannel) {
+        if (newMsg.id && stream.querySelector(`[data-msg-id="${newMsg.id}"]`)) return;
 
-      // Deduplicate if already optimistically appended
-      if (isSelf) {
-        const untagged = stream.querySelectorAll('.chat-msg.self:not([data-msg-id])');
-        if (untagged.length > 0) {
-          const last = untagged[untagged.length - 1];
-          if (last.querySelector('.chat-bubble')?.textContent === newMsg.message) {
-            if (newMsg.id) last.setAttribute('data-msg-id', newMsg.id);
-            return;
+        // Deduplicate if already optimistically appended
+        if (isSelf) {
+          const untagged = stream.querySelectorAll('.chat-msg.self:not([data-msg-id])');
+          if (untagged.length > 0) {
+            const last = untagged[untagged.length - 1];
+            if (last.querySelector('.chat-bubble')?.textContent === newMsg.message) {
+              if (newMsg.id) last.setAttribute('data-msg-id', newMsg.id);
+              return;
+            }
           }
         }
-      }
 
-      const hint = stream.querySelector('.chat-empty-hint');
-      if (hint) hint.remove();
-      const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const msgEl = document.createElement('div');
-      msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
-      if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
-      msgEl.setAttribute('data-channel', newMsg.channel);
-      msgEl.innerHTML = `
-        <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
-        <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
-        <div class="chat-time">${time}</div>
-      `;
-      stream.appendChild(msgEl);
-      stream.scrollTop = stream.scrollHeight;
+        const hint = stream.querySelector('.chat-empty-hint');
+        if (hint) hint.remove();
+        const time = new Date(newMsg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgEl = document.createElement('div');
+        msgEl.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+        if (newMsg.id) msgEl.setAttribute('data-msg-id', newMsg.id);
+        msgEl.setAttribute('data-channel', newMsg.channel);
+        msgEl.innerHTML = `
+          <div class="chat-sender">${escapeHtml(newMsg.senderName)} (${escapeHtml(newMsg.senderRole)})</div>
+          <div class="chat-bubble">${escapeHtml(newMsg.message)}</div>
+          <div class="chat-time">${time}</div>
+        `;
+        stream.appendChild(msgEl);
+        stream.scrollTop = stream.scrollHeight;
+      } else {
+        // B. Background / Alternate View Alert: Message arrived on another channel OR another screen
+        if (!isSelf) {
+          // Increment or show unread badge on channel button
+          const targetBtn = document.querySelector(`[data-admin-ch="${msgChannel}"]`);
+          if (targetBtn) {
+            let badge = targetBtn.querySelector('.ch-unread-badge');
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'ch-unread-badge';
+              badge.style.cssText = 'background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: auto;';
+              badge.textContent = '1';
+              targetBtn.appendChild(badge);
+            } else {
+              const count = parseInt(badge.textContent || '0', 10) + 1;
+              badge.textContent = String(count);
+            }
+          }
+
+          // Show unread indicator dot on sidebar navAdminChannels
+          const navCh = document.getElementById('navAdminChannels');
+          if (navCh) {
+            let dot = navCh.querySelector('.nav-unread-dot');
+            if (!dot) {
+              dot = document.createElement('span');
+              dot.className = 'nav-unread-dot';
+              dot.style.cssText = 'width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block; margin-left: auto;';
+              navCh.appendChild(dot);
+            }
+          }
+
+          // Show unread indicator dot on mobile bottom bar Menu button
+          const bnavMenu = document.getElementById('bnavMenu');
+          if (bnavMenu) {
+            let mDot = bnavMenu.querySelector('.nav-unread-dot');
+            if (!mDot) {
+              mDot = document.createElement('span');
+              mDot.className = 'nav-unread-dot';
+              mDot.style.cssText = 'position: absolute; top: 6px; right: 22px; width: 7px; height: 7px; border-radius: 50%; background: #ef4444;';
+              bnavMenu.appendChild(mDot);
+            }
+          }
+
+          // Trigger Dispatcher Prompt audio-visual alert so user never misses incoming cross-device comms
+          const channelTitle = msgChannel === 'CHANNEL_1_RESOURCE' ? 'Resource Mgr' : 'Incident Mgr';
+          showDispatcherPrompt({
+            type: 'ACCEPTED',
+            responderName: `${channelTitle.toUpperCase()} COMMS`,
+            callsign: newMsg.senderName || 'COMMS',
+            notes: `"${newMsg.message.slice(0, 50)}${newMsg.message.length > 50 ? '...' : ''}"`
+          });
+        }
+      }
     });
 
     // Resource Manager Real-Time Stock Updates
@@ -2733,6 +2829,7 @@ function initSocket() {
 async function init() {
   initMap();
   setupModals();
+  updateGatewayStatusUI(false);
   initSocket();
   if (currentUser) {
     updateUserUI(currentUser);
@@ -3371,12 +3468,27 @@ async function loadAdminChannel(channelName) {
   const role = currentUser?.role || 'ADMIN';
   const config = ROLE_TIER_PERMISSIONS[role] || ROLE_TIER_PERMISSIONS.ADMIN;
   const targetChannel = channelName || config.allowedChannels[0] || 'CHANNEL_1_RESOURCE';
-  const previousChannel = currentAdminChannel;
   currentAdminChannel = config.allowedChannels.includes(targetChannel) ? targetChannel : (config.allowedChannels[0] || 'CHANNEL_1_RESOURCE');
 
   const stream = document.getElementById('adminChannelChatStream');
   const title = document.getElementById('activeAdminChannelTitle');
   const sub = document.getElementById('activeAdminChannelSub');
+
+  // Clear unread badge on selected channel button
+  const targetBtn = document.querySelector(`[data-admin-ch="${currentAdminChannel}"]`);
+  if (targetBtn) {
+    const unread = targetBtn.querySelector('.ch-unread-badge');
+    if (unread) unread.remove();
+  }
+
+  // Clear navigation unread indicators if no remaining unread messages
+  const remainingUnread = document.querySelectorAll('.ch-unread-badge');
+  if (remainingUnread.length === 0) {
+    const navDot = document.querySelector('#navAdminChannels .nav-unread-dot');
+    if (navDot) navDot.remove();
+    const mDot = document.querySelector('#bnavMenu .nav-unread-dot');
+    if (mDot) mDot.remove();
+  }
 
   // Update tabs active state
   document.querySelectorAll('[data-admin-ch]').forEach(btn => {
@@ -3391,12 +3503,9 @@ async function loadAdminChannel(channelName) {
     if (sub) sub.textContent = 'Incident severity triage verification, casualty count adjustments, and resource need escalations.';
   }
 
-  // Socket room switch: leave previous channel and join current channel
+  // Keep all authorized topology channels subscribed (do NOT leave rooms!)
   if (socket && socket.connected) {
-    if (previousChannel && previousChannel !== currentAdminChannel) {
-      socket.emit('channel:leave', { channel: previousChannel });
-    }
-    socket.emit('channel:join', { channel: currentAdminChannel });
+    joinAuthorizedChannels();
   }
 
   if (stream) {
@@ -3769,6 +3878,64 @@ function bindNewArchitectureHandlers() {
   if (multiModal) {
     multiModal.addEventListener('click', (e) => {
       if (e.target === multiModal) multiModal.style.display = 'none';
+    });
+  }
+
+  // Incident Manager Quick Comms Jump
+  document.getElementById('openAdminCommsFromIM')?.addEventListener('click', () => {
+    switchView('adminChannels');
+    loadAdminChannel('CHANNEL_2_INCIDENT');
+  });
+
+  // Gateway Configuration Modal Handlers
+  const openGatewayModal = () => {
+    const modal = document.getElementById('gatewayConfigModal');
+    if (!modal) return;
+    const input = document.getElementById('customGatewayInput');
+    if (input) {
+      input.value = localStorage.getItem('crisiscore_api_url') || getApiBase() || `http://${DEFAULT_HOST_IP}:${DEFAULT_PORT}`;
+    }
+    modal.style.display = 'flex';
+  };
+
+  const closeGatewayModal = () => {
+    const modal = document.getElementById('gatewayConfigModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  document.getElementById('gatewayStatusBtn')?.addEventListener('click', openGatewayModal);
+  document.getElementById('btnConfigGateway')?.addEventListener('click', openGatewayModal);
+  document.getElementById('closeGatewayModalBtn')?.addEventListener('click', closeGatewayModal);
+  document.getElementById('cancelGatewayBtn')?.addEventListener('click', closeGatewayModal);
+
+  document.querySelectorAll('.btn-preset-gateway').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const gw = e.currentTarget.getAttribute('data-gw');
+      const input = document.getElementById('customGatewayInput');
+      if (input) input.value = gw;
+    });
+  });
+
+  document.getElementById('saveGatewayBtn')?.addEventListener('click', () => {
+    const input = document.getElementById('customGatewayInput');
+    const val = input ? input.value.trim() : '';
+    setApiGateway(val);
+    closeGatewayModal();
+
+    // Reconnect socket to new gateway
+    if (socket) {
+      try { socket.disconnect(); } catch (e) {}
+      socket = null;
+    }
+    initSocket();
+    updateGatewayStatusUI(false);
+    loadBackendData();
+  });
+
+  const gwModal = document.getElementById('gatewayConfigModal');
+  if (gwModal) {
+    gwModal.addEventListener('click', (e) => {
+      if (e.target === gwModal) closeGatewayModal();
     });
   }
 }

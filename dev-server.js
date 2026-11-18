@@ -40,7 +40,7 @@ async function start() {
   setTimeout(() => {
     console.log('⚡ Launching Vite Dev Server (port 5173)...');
     const viteBin = path.resolve('node_modules', 'vite', 'bin', 'vite.js');
-    const viteProc = spawn(process.execPath, [viteBin], {
+    const viteProc = spawn(process.execPath, [viteBin, '--host', '0.0.0.0'], {
       stdio: 'inherit'
     });
 

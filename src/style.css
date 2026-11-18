@@ -189,6 +189,10 @@ body {
   background: var(--green);
 }
 
+.pulse-dot.red {
+  background: var(--red);
+}
+
 /* ─── Main Content ─── */
 .main-dashboard {
   flex: 1;

@@ -105,6 +105,10 @@
         </div>
         
         <div class="topbar-actions">
+          <button type="button" class="btn-icon" id="gatewayStatusBtn" title="Backend Server Gateway Settings" style="width: auto; padding: 4px 10px; border-radius: 20px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1); color: #34d399; font-weight: 600;">
+            <span class="pulse-dot green" id="gatewayStatusDot"></span>
+            <span id="gatewayStatusLabel">192.168.1.5:3001</span>
+          </button>
           <button class="btn-icon" id="quickAuthBtn" title="Switch Account / Login"><i class="ph ph-user-switch"></i></button>
           <button class="btn-icon" id="topbarLogoutBtn" title="Log Out / Exit Session" style="color: #ff7b72;"><i class="ph ph-sign-out"></i></button>
           
@@ -645,6 +649,9 @@
                 <button type="button" class="btn-reg-unit" id="openAddIncidentModalBtn" style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.35), rgba(139, 92, 246, 0.25)); color: #c4b5fd; border: 1px solid #a78bfa; font-weight: 700; padding: 6px 14px; font-size: 12px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Log a new disaster incident">
                   <i class="ph-fill ph-plus-circle"></i> + Add Incident
                 </button>
+                <button type="button" class="btn-reg-unit" id="openAdminCommsFromIM" style="background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid #34d399; font-weight: 600; padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Open Direct Comms Line with Central Admin">
+                  <i class="ph-fill ph-chats-circle"></i> Admin Comms (Ch 2)
+                </button>
               </div>
             </div>
 
@@ -881,6 +888,14 @@
                 <span class="desc">Disaster Triage • Verification Gate • Resource Needs</span>
               </div>
             </div>
+          </div>
+
+          <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-dim);">
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+              <span class="pulse-dot green" id="authGatewayDot"></span>
+              Gateway: <strong id="authGatewayLabel" style="color: var(--text-main);">192.168.1.5:3001</strong>
+            </span>
+            <button type="button" id="btnConfigGateway" style="background: none; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 3px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">Change IP</button>
           </div>
         </div>
       </div>
@@ -1358,6 +1373,40 @@
             <i class="ph-fill ph-paper-plane-right"></i> 1-Click Deploy Optimal Fleet
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gateway Configuration Modal -->
+  <div class="auth-modal-backdrop" id="gatewayConfigModal" style="display: none; z-index: 10000;">
+    <div class="auth-modal-card" style="max-width: 440px; padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+          <i class="ph-fill ph-broadcast" style="color: #34d399;"></i> Backend Gateway Settings
+        </h3>
+        <button type="button" class="close-modal-btn" id="closeGatewayModalBtn" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;"><i class="ph ph-x"></i></button>
+      </div>
+      <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.4;">
+        Connect your phone and desktop to the same CrisisCore backend server on your Wi-Fi network for instant cross-device synchronization.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        <label style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Presets</label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-preset-gateway" data-gw="http://192.168.1.5:3001" style="flex: 1; padding: 8px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.15); color: #34d399; cursor: pointer;">Wi-Fi (192.168.1.5:3001)</button>
+          <button type="button" class="btn-preset-gateway" data-gw="http://10.0.2.2:3001" style="flex: 1; padding: 8px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-secondary); cursor: pointer;">Emulator (10.0.2.2)</button>
+          <button type="button" class="btn-preset-gateway" data-gw="" style="flex: 1; padding: 8px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-secondary); cursor: pointer;">Auto / Local</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 6px;">Custom Gateway URL</label>
+        <input type="text" id="customGatewayInput" placeholder="http://192.168.1.5:3001" class="chat-input-field" style="width: 100%; padding: 10px 12px; font-size: 13px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff;" />
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" id="cancelGatewayBtn" style="padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px;">Cancel</button>
+        <button type="button" id="saveGatewayBtn" style="padding: 8px 18px; border-radius: 6px; border: none; background: #10b981; color: #080a11; font-weight: 700; cursor: pointer; font-size: 12px;">Save & Reconnect</button>
       </div>
     </div>
   </div>

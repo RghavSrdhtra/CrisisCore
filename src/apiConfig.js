@@ -4,6 +4,10 @@
  * and Native Android (Capacitor WebView).
  */
 
+export const DEFAULT_HOST_IP = '192.168.1.5';
+export const DEFAULT_PORT = '3001';
+export const DEFAULT_GATEWAY_URL = `http://${DEFAULT_HOST_IP}:${DEFAULT_PORT}`;
+
 export function getApiBase() {
   if (typeof window === 'undefined') return '';
   const custom = localStorage.getItem('crisiscore_api_url');
@@ -17,10 +21,25 @@ export function getApiBase() {
   );
 
   if (isCapacitor) {
-    // 10.0.2.2 is the Android Emulator alias for host PC localhost
-    return 'http://10.0.2.2:3001';
+    // Default to the host PC LAN IP, which works across physical phones
+    // and emulators on the same local Wi-Fi network
+    return DEFAULT_GATEWAY_URL;
   }
+
+  // If accessed from a mobile browser on LAN (e.g., http://192.168.1.5:5173/)
+  if (window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `http://${window.location.hostname}:${DEFAULT_PORT}`;
+  }
+
   return '';
+}
+
+export function setApiGateway(url) {
+  if (!url) {
+    localStorage.removeItem('crisiscore_api_url');
+  } else {
+    localStorage.setItem('crisiscore_api_url', url.replace(/\/$/, ''));
+  }
 }
 
 export function apiUrl(path) {
