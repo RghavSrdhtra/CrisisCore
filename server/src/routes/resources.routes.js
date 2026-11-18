@@ -71,7 +71,7 @@ router.post('/', optionalAuthenticate, async (req, res) => {
       return res.status(400).json({ error: 'Name and category are required.' });
     }
 
-    const qty = parseInt(quantityTotal || 1, 10);
+    const qty = parseInt(quantityTotal !== undefined && quantityTotal !== null ? quantityTotal : 100, 10);
     const newResource = await prisma.resource.create({
       data: {
         name,
@@ -81,7 +81,7 @@ router.post('/', optionalAuthenticate, async (req, res) => {
         quantityTotal: qty,
         quantityAvailable: qty,
         quantityAllocated: 0,
-        unit: unit || 'UNITS',
+        unit: unit || 'Units',
         depotName: depotName || 'Central Logistics Depot',
         depotLat: depotLat ? parseFloat(depotLat) : 28.614,
         depotLng: depotLng ? parseFloat(depotLng) : 77.210

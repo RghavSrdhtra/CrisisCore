@@ -6,17 +6,17 @@
     "RandomForest": {
       "accuracy": 1.0,
       "f1_macro": 1.0,
-      "training_time_sec": 0.322
+      "training_time_sec": 0.799
     },
     "GradientBoosting": {
       "accuracy": 1.0,
       "f1_macro": 1.0,
-      "training_time_sec": 3.654
+      "training_time_sec": 4.966
     },
     "LogisticRegression": {
       "accuracy": 1.0,
       "f1_macro": 1.0,
-      "training_time_sec": 0.158
+      "training_time_sec": 0.169
     }
   },
   "classification_report": {
@@ -65,5 +65,5 @@
     "LOW",
     "MEDIUM"
   ],
-  "trained_at": "2026-11-06T07:53:08Z"
+  "trained_at": "2026-11-18T09:49:10Z"
 }

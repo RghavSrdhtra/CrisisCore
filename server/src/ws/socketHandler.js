@@ -209,5 +209,13 @@ export const wsBroadcaster = {
   notifyNewResponder: (io, responder) => {
     if (!io) return;
     io.to('coordinators').emit('responder:registered', responder);
+  },
+
+  // Notify batch dispatch of multiple assignments
+  notifyMultiDispatch: (io, assignments) => {
+    if (!io || !Array.isArray(assignments)) return;
+    for (const a of assignments) {
+      wsBroadcaster.notifyNewAssignment(io, a);
+    }
   }
 };

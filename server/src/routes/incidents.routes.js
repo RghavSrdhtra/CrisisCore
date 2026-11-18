@@ -123,13 +123,26 @@ router.post('/', optionalAuthenticate, async (req, res) => {
     const isLocationActive = Boolean(locationSharingActive);
     const parsedResourceNeeds = resourceNeeds ? (typeof resourceNeeds === 'object' ? JSON.stringify(resourceNeeds) : String(resourceNeeds)) : null;
 
+    // Direct Incident Manager / Admin triage verification capability
+    const isManager = req.user && ['INCIDENT_MANAGER', 'ADMIN', 'COORDINATOR'].includes(req.user.role);
+    const shouldVerify = isManager || Boolean(req.body.autoVerify);
+    const initialStatus = shouldVerify ? 'TRIAGED' : 'REPORTED';
+    const initialVerificationStatus = shouldVerify ? 'VERIFIED' : 'PENDING';
+    const verifiedAt = shouldVerify ? new Date() : null;
+    const verifiedBy = shouldVerify ? (req.user?.name || 'Incident Manager') : null;
+    const managerNotes = shouldVerify ? 'Directly triaged and verified upon entry by Incident Manager.' : null;
+
     const newIncident = await prisma.incident.create({
       data: {
         incidentNumber,
         type: normalizedType,
         description: description || 'Emergency SOS assistance requested.',
         affectedCount: parsedAffected,
-        status: 'REPORTED',
+        status: initialStatus,
+        verificationStatus: initialVerificationStatus,
+        verifiedAt,
+        verifiedBy,
+        managerNotes,
         severity: upperSev,
         predictedPriority,
         priorityConfidence,

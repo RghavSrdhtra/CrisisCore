@@ -1706,15 +1706,19 @@ function setupModals() {
       const name = document.getElementById('resName')?.value.trim();
       const category = document.getElementById('resCategory')?.value;
       const quantityTotal = parseInt(document.getElementById('resQuantity')?.value || '100', 10);
-      const unit = document.getElementById('resUnit')?.value.trim() || 'Units';
+      const unit = document.getElementById('resUnit')?.value?.trim() || 'Units';
       const depotName = document.getElementById('resDepot')?.value.trim() || 'Central Logistics Depot';
       const depotLat = parseFloat(document.getElementById('resLat')?.value || '28.6139');
       const depotLng = parseFloat(document.getElementById('resLng')?.value || '77.2090');
 
       try {
+        const token = localStorage.getItem('crisiscore_token');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const res = await fetch('/api/resources', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             name,
             category,
@@ -1730,9 +1734,9 @@ function setupModals() {
         
         showDispatcherPrompt({
           type: 'ACCEPTED',
-          responderName: 'RESOURCE MANAGER',
+          responderName: currentUser?.name || 'RESOURCE MANAGER',
           callsign: category,
-          notes: `Added resource: ${name} (${quantityTotal} ${unit})`
+          notes: `Added resource: ${name} to ${depotName}`
         });
 
         if (addResourceModal) addResourceModal.style.display = 'none';
@@ -1785,6 +1789,8 @@ function setupModals() {
       const medical_kits = parseInt(document.getElementById('incMeds')?.value || '0', 10);
       const ambulances = parseInt(document.getElementById('incAmbulances')?.value || '0', 10);
 
+      const autoVerify = document.getElementById('incAutoVerify')?.checked ?? true;
+
       try {
         const token = localStorage.getItem('crisiscore_token');
         const headers = { 'Content-Type': 'application/json' };
@@ -1801,6 +1807,7 @@ function setupModals() {
             lng,
             affectedCount,
             description,
+            autoVerify,
             resourceNeeds: {
               water_litres,
               food_rations,
@@ -1813,10 +1820,10 @@ function setupModals() {
         if (!res.ok) throw new Error(data.error || 'Failed to create incident');
 
         showDispatcherPrompt({
-          type: 'DECLINED',
+          type: 'ACCEPTED',
           responderName: currentUser?.name || 'INCIDENT MANAGER',
           callsign: data.incident?.incidentNumber || 'NEW INCIDENT',
-          notes: `Logged incident: ${type} at ${address}`
+          notes: `Logged & triaged incident: ${type} at ${address}`
         });
 
         if (addIncidentModal) addIncidentModal.style.display = 'none';
@@ -3743,7 +3750,226 @@ function bindNewArchitectureHandlers() {
       }
     });
   }
+
+  // Multi-Incident AI Optimizer Open & Action Handlers
+  document.getElementById('openMultiOptimizeModalBtn')?.addEventListener('click', window.openMultiOptimizeModal);
+  document.getElementById('openMultiOptimizeModalBtnAdmin')?.addEventListener('click', window.openMultiOptimizeModal);
+  document.getElementById('openMultiOptimizeModalBtnIM')?.addEventListener('click', window.openMultiOptimizeModal);
+  document.getElementById('closeMultiOptimizeModalBtn')?.addEventListener('click', () => {
+    const modal = document.getElementById('multiOptimizeModal');
+    if (modal) modal.style.display = 'none';
+  });
+  document.getElementById('cancelMultiOptimizeBtn')?.addEventListener('click', () => {
+    const modal = document.getElementById('multiOptimizeModal');
+    if (modal) modal.style.display = 'none';
+  });
+  document.getElementById('executeAllMultiDispatchBtn')?.addEventListener('click', window.executeAllMultiDispatch);
+
+  const multiModal = document.getElementById('multiOptimizeModal');
+  if (multiModal) {
+    multiModal.addEventListener('click', (e) => {
+      if (e.target === multiModal) multiModal.style.display = 'none';
+    });
+  }
 }
+
+// --- Multi-Incident AI Resource & Fleet Optimizer ---
+let activeMultiOptimizations = [];
+
+window.openMultiOptimizeModal = async () => {
+  const modal = document.getElementById('multiOptimizeModal');
+  const banner = document.getElementById('multiOptimizeSummaryBanner');
+  const list = document.getElementById('multiOptimizeList');
+  const statusText = document.getElementById('multiOptimizeStatusText');
+  const dispatchBtn = document.getElementById('executeAllMultiDispatchBtn');
+
+  if (!modal || !list) return;
+
+  modal.style.display = 'flex';
+  list.innerHTML = `
+    <div style="padding: 40px; text-align: center; color: var(--cyan);">
+      <i class="ph ph-spinner ph-spin" style="font-size: 28px; margin-bottom: 10px;"></i>
+      <p style="font-size: 14px; font-weight: 500;">Running Bipartite Hungarian & OR-Tools Optimization across active disaster sites...</p>
+    </div>
+  `;
+  if (banner) banner.innerHTML = '';
+  if (dispatchBtn) dispatchBtn.disabled = true;
+
+  try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/assignments/multi-optimize', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({})
+    });
+
+    if (!res.ok) throw new Error('Failed to run multi-incident optimization');
+    const data = await res.json();
+    const { optimizations, summary } = data;
+    activeMultiOptimizations = optimizations || [];
+
+    if (activeMultiOptimizations.length === 0) {
+      list.innerHTML = `
+        <div style="padding: 30px; text-align: center; color: var(--text-dim); background: rgba(255,255,255,0.02); border-radius: 8px;">
+          <i class="ph ph-check-circle" style="font-size: 32px; color: var(--green); margin-bottom: 8px;"></i>
+          <p style="font-size: 14px; font-weight: 600; color: #fff;">No Pending Unassigned Incidents</p>
+          <p style="font-size: 12px; margin-top: 4px;">All emergency requests are currently triaged or dispatched.</p>
+        </div>
+      `;
+      if (dispatchBtn) dispatchBtn.disabled = true;
+      return;
+    }
+
+    if (banner && summary) {
+      banner.innerHTML = `
+        <div style="flex: 1; min-width: 160px; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.25); border-radius: 8px; padding: 12px 16px;">
+          <span style="font-size: 11px; color: #c4b5fd; text-transform: uppercase; font-weight: 600;">Active Disaster Sites</span>
+          <div style="font-size: 22px; font-weight: 700; color: #fff; margin-top: 4px;">${summary.totalIncidents} Locations</div>
+        </div>
+        <div style="flex: 1; min-width: 160px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 12px 16px;">
+          <span style="font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 600;">Units Matched</span>
+          <div style="font-size: 22px; font-weight: 700; color: #fff; margin-top: 4px;">${summary.totalRespondersAssigned} / ${summary.availableFleetTotal} Fleet</div>
+        </div>
+        <div style="flex: 1; min-width: 160px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 12px 16px;">
+          <span style="font-size: 11px; color: #34d399; text-transform: uppercase; font-weight: 600;">Global Efficiency</span>
+          <div style="font-size: 22px; font-weight: 700; color: #10b981; margin-top: 4px;">${summary.globalEfficiencyScore}% <small style="font-size: 11px; color: var(--text-dim);">avg ${summary.averageDistanceKm} km</small></div>
+        </div>
+        <div style="width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+          <i class="ph-fill ph-info" style="color: #38bdf8; font-size: 16px;"></i>
+          <span>${escapeHtml(summary.rationale)}</span>
+        </div>
+      `;
+    }
+
+    list.innerHTML = activeMultiOptimizations.map((opt, i) => {
+      const inc = opt.incident;
+      const resp = opt.recommendedResponder;
+      const suppliesList = (opt.allocatedSupplies || []).map(s => `${s.qty} ${s.unit} ${s.name}`).join(', ') || 'Standard First-Aid Kit';
+      const sevColor = inc.severity === 'CRITICAL' ? '#ef4444' : (inc.severity === 'HIGH' ? '#f59e0b' : '#38bdf8');
+
+      return `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="background: rgba(167, 139, 250, 0.2); color: #c4b5fd; font-weight: 700; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(167, 139, 250, 0.4);">
+                SITE ${i + 1}: ${escapeHtml(inc.incidentNumber)}
+              </span>
+              <strong style="color: #fff; font-size: 14px;">${escapeHtml(inc.type)} Disaster</strong>
+              <span style="font-size: 12px; color: var(--text-dim);">•</span>
+              <span style="font-size: 12px; color: var(--text-secondary);"><i class="ph-fill ph-map-pin"></i> ${escapeHtml(inc.address)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="background: rgba(255,255,255,0.08); color: ${sevColor}; border: 1px solid ${sevColor}; font-weight: 700; font-size: 11px;">
+                ${inc.severity} (${inc.affectedCount} Casualties)
+              </span>
+              <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; font-weight: 600; font-size: 11px;">
+                Match: ${Math.round(opt.recommendationScore * 100)}%
+              </span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.05);">
+            <div>
+              <span style="font-size: 11px; color: var(--cyan); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">
+                <i class="ph-fill ph-ambulance"></i> Optimal Mobile Asset
+              </span>
+              ${resp ? `
+                <div style="font-size: 13px; font-weight: 700; color: #fff;">
+                  ${escapeHtml(resp.name)} <span style="color: #38bdf8;">(${escapeHtml(resp.callsign)})</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                  Type: ${escapeHtml(resp.type.replace('_', ' '))} &nbsp;•&nbsp; <strong>${resp.distanceKm} km</strong> &nbsp;•&nbsp; <strong>${resp.etaMinutes} min ETA</strong>
+                </div>
+              ` : `
+                <div style="font-size: 12px; color: var(--red);">No available responder in range</div>
+              `}
+            </div>
+
+            <div>
+              <span style="font-size: 11px; color: #f59e0b; text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px;">
+                <i class="ph-fill ph-package"></i> Depot Relief Payload
+              </span>
+              <div style="font-size: 12px; color: #cbd5e1; line-height: 1.4;">
+                ${escapeHtml(suppliesList)}
+              </div>
+            </div>
+          </div>
+
+          <div style="background: rgba(167, 139, 250, 0.08); border-left: 3px solid #a78bfa; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 12px; color: #e2e8f0; display: flex; align-items: flex-start; gap: 8px;">
+            <i class="ph-fill ph-scales" style="color: #a78bfa; font-size: 16px; margin-top: 2px; flex-shrink: 0;"></i>
+            <div>
+              <strong style="color: #c4b5fd;">Cross-Location Decision Rationale:</strong>
+              <span style="margin-left: 4px;">${escapeHtml(opt.tradeOffAnalysis)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (dispatchBtn) dispatchBtn.disabled = false;
+    if (statusText) statusText.textContent = `Generated optimal allocation across ${activeMultiOptimizations.length} disaster locations.`;
+
+  } catch (err) {
+    console.error('Multi optimize load error:', err);
+    list.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--red);">Error running multi-site optimization: ${err.message}</div>`;
+  }
+};
+
+window.executeAllMultiDispatch = async () => {
+  if (!activeMultiOptimizations || activeMultiOptimizations.length === 0) return;
+  const count = activeMultiOptimizations.length;
+  if (!confirm(`Execute 1-Click AI Dispatch for all ${count} disaster locations simultaneously?`)) return;
+
+  const btn = document.getElementById('executeAllMultiDispatchBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Mobilizing Fleet...';
+  }
+
+  try {
+    const token = localStorage.getItem('crisiscore_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const dispatches = activeMultiOptimizations.map(opt => ({
+      incidentId: opt.incident.id,
+      responderId: opt.recommendedResponder?.id,
+      allocatedSupplies: opt.allocatedSupplies,
+      stopSequence: opt.stopSequence,
+      recommendationScore: opt.recommendationScore,
+      notes: `Batch dispatched via AI Multi-Incident Optimizer: ${opt.tradeOffAnalysis}`
+    })).filter(d => d.responderId);
+
+    const res = await fetch('/api/assignments/batch-dispatch', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ dispatches })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Batch dispatch failed');
+
+    showDispatcherPrompt({
+      type: 'ACCEPTED',
+      responderName: 'MULTI-INCIDENT AI',
+      callsign: 'FLEET DISPATCH',
+      notes: data.message || `Dispatched ${dispatches.length} units across emergency sites.`
+    });
+
+    document.getElementById('multiOptimizeModal').style.display = 'none';
+    await loadBackendData();
+    await loadIncidentManagerFeed();
+  } catch (err) {
+    alert(`Batch dispatch failed: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ph-fill ph-paper-plane-right"></i> 1-Click Deploy Optimal Fleet';
+    }
+  }
+};
 
 // Call binding once DOM is ready
 if (typeof document !== 'undefined') {

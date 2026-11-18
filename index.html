@@ -216,8 +216,11 @@
           <section class="glass-panel feed-panel">
             <div class="panel-header">
               <h2><i class="ph ph-warning-circle"></i> Live Incidents</h2>
-              <div style="display: flex; gap: 8px; align-items: center;">
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <span class="badge" id="incidentCount">0</span>
+                <button type="button" class="btn-reg-unit" id="openMultiOptimizeModalBtnAdmin" style="background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid #38bdf8; font-weight: 600; padding: 4px 8px; font-size: 11px;" title="Optimize resources across multiple active incidents">
+                  <i class="ph-fill ph-brain"></i> AI Multi-Optimize
+                </button>
                 <button type="button" class="btn-reg-unit" id="openAddIncidentModalBtnAdmin" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; font-weight: 600; padding: 4px 8px; font-size: 11px;" title="Report / Log Incident">
                   <i class="ph-fill ph-plus-circle"></i> + Incident
                 </button>
@@ -634,10 +637,13 @@
                   Review incoming emergency requests, accept or reject requisitions, track individual request lifecycles, and mark completed operations as done.
                 </p>
               </div>
-              <div style="display: flex; gap: 10px; align-items: center;">
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 <span class="badge badge-critical" id="pendingTriageCountBadge">0 Pending Triage</span>
-                <button class="btn-reg-unit" id="openAddIncidentModalBtn" style="background: rgba(167, 139, 250, 0.25); color: #a78bfa; border: 1px solid #a78bfa; font-weight: 600;">
-                  <i class="ph-fill ph-plus-circle"></i> + Report Request
+                <button type="button" class="btn-reg-unit" id="openMultiOptimizeModalBtnIM" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid #a78bfa; font-weight: 600; padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Run AI multi-location optimization across active incidents">
+                  <i class="ph-fill ph-brain"></i> Multi-Incident AI Optimizer
+                </button>
+                <button type="button" class="btn-reg-unit" id="openAddIncidentModalBtn" style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.35), rgba(139, 92, 246, 0.25)); color: #c4b5fd; border: 1px solid #a78bfa; font-weight: 700; padding: 6px 14px; font-size: 12px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Log a new disaster incident">
+                  <i class="ph-fill ph-plus-circle"></i> + Add Incident
                 </button>
               </div>
             </div>
@@ -808,9 +814,8 @@
             <span>Emergency Tactical Coordination Grid</span>
           </div>
         </div>
-        <div class="auth-tabs">
-          <button type="button" class="auth-tab-btn active" id="tabAuthSignIn">Sign In</button>
-          <button type="button" class="auth-tab-btn" id="tabAuthRegister">Register New User</button>
+        <div class="auth-badge-status" style="font-size: 11px; color: var(--cyan); background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.25); padding: 5px 12px; border-radius: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+          <i class="ph-fill ph-lock-key"></i> Authorized Operational Access
         </div>
       </div>
 
@@ -877,163 +882,6 @@
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- Tab 2: Register -->
-        <div id="authRegisterPane" class="auth-pane" style="display: none;">
-          <div class="reg-role-toggle">
-            <button type="button" class="reg-role-btn active" id="btnRegCivilian">
-              <i class="ph-fill ph-user"></i>
-              <div>
-                <strong>Civilian Requester</strong>
-                <small>Request assistance & track rescuers</small>
-              </div>
-            </button>
-            <button type="button" class="reg-role-btn" id="btnRegResponder">
-              <i class="ph-fill ph-ambulance"></i>
-              <div>
-                <strong>Emergency First Respondent</strong>
-                <small>Accept dispatches & field missions</small>
-              </div>
-            </button>
-          </div>
-
-          <!-- Civilian Registration Form -->
-          <form id="regCivilianForm" class="auth-form reg-subform">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Full Name</label>
-                <div class="input-wrap">
-                  <i class="ph ph-user"></i>
-                  <input type="text" id="regCivName" placeholder="e.g. Rahul Sharma" required />
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Phone Number</label>
-                <div class="input-wrap">
-                  <i class="ph ph-phone"></i>
-                  <input type="tel" id="regCivPhone" placeholder="+91-9876543210" required />
-                </div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Email Address</label>
-                <div class="input-wrap">
-                  <i class="ph ph-envelope"></i>
-                  <input type="email" id="regCivEmail" placeholder="rahul@example.com" required />
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Password</label>
-                <div class="input-wrap">
-                  <i class="ph ph-lock"></i>
-                  <input type="password" id="regCivPassword" placeholder="Create password" required />
-                </div>
-              </div>
-            </div>
-            <div id="regCivAlert" class="auth-alert" style="display: none;"></div>
-            <button type="submit" class="auth-submit-btn" id="regCivSubmitBtn">
-              <span>Register as Civilian</span>
-              <i class="ph ph-check-circle"></i>
-            </button>
-          </form>
-
-          <!-- Respondent Registration Form with Mandatory Voluntary ToS -->
-          <form id="regResponderForm" class="auth-form reg-subform" style="display: none;">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Officer / Respondent Name</label>
-                <div class="input-wrap">
-                  <i class="ph ph-user-circle"></i>
-                  <input type="text" id="regRespName" placeholder="e.g. Officer Vikram Singh" required />
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Unit Callsign</label>
-                <div class="input-wrap">
-                  <i class="ph ph-broadcast"></i>
-                  <input type="text" id="regRespCallsign" placeholder="e.g. RESCUE-03, FIRE-02" required style="text-transform: uppercase;" />
-                </div>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Agency / Department</label>
-                <div class="input-wrap">
-                  <i class="ph ph-buildings"></i>
-                  <input type="text" id="regRespAgency" placeholder="e.g. Delhi Fire & Rescue Services" required />
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Badge Number / ID</label>
-                <div class="input-wrap">
-                  <i class="ph ph-identification-card"></i>
-                  <input type="text" id="regRespBadge" placeholder="e.g. DF-4421" required />
-                </div>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Vehicle / Unit Type</label>
-                <select id="regRespType" class="input-styled" style="width: 100%;">
-                  <option value="MEDICAL_AMBULANCE">Medical Ambulance (ALS Unit)</option>
-                  <option value="FIRE_ENGINE">Fire Engine / Rescue Truck</option>
-                  <option value="POLICE_PATROL">Police Perimeter Patrol</option>
-                  <option value="SEARCH_RESCUE">Disaster Search & Rescue</option>
-                </select>
-              </div>
-              <div class="form-group flex-1">
-                <label>Contact Phone</label>
-                <div class="input-wrap">
-                  <i class="ph ph-phone"></i>
-                  <input type="tel" id="regRespPhone" placeholder="+91-9812345678" required />
-                </div>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Email Address</label>
-                <div class="input-wrap">
-                  <i class="ph ph-envelope"></i>
-                  <input type="email" id="regRespEmail" placeholder="vikram@rescue.gov" required />
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Password</label>
-                <div class="input-wrap">
-                  <i class="ph ph-lock"></i>
-                  <input type="password" id="regRespPassword" placeholder="Create password" required />
-                </div>
-              </div>
-            </div>
-
-            <!-- Mandatory Voluntary Emergency ToS Box -->
-            <div class="tos-legal-card">
-              <div class="tos-header">
-                <i class="ph-fill ph-warning-octagon text-amber"></i>
-                <strong>VOLUNTARY EMERGENCY DISPATCH CODE OF CONDUCT & LIABILITY AGREEMENT</strong>
-              </div>
-              <div class="tos-body">
-                <p><strong>1. Operational Duty of Care:</strong> By registering as an active Field Respondent on the CrisisCore Tactical Network, you voluntarily agree to receive emergency dispatches. You acknowledge that accepting an emergency dispatch creates a binding operational duty of care to the civilian victim in distress.</p>
-                <p><strong>2. Protocol Adherence:</strong> You agree to provide real-time status updates (En Route, On Scene, Completed) and maintain active GPS telemetry during missions.</p>
-                <p><strong>3. Statutory Abandonment Liability & Penalties:</strong> Intentionally, negligently, or maliciously abandoning an accepted emergency call without prior Central Dispatch authorization constitutes a severe dereliction of duty. Violators are subject to immediate badge revocation, blacklisting from the emergency grid, disciplinary reporting to municipal authorities, and statutory administrative fines of up to ₹25,000 / $500 under Municipal Emergency Services Regulations.</p>
-              </div>
-              <label class="tos-checkbox-label">
-                <input type="checkbox" id="regRespTosCheck" required />
-                <span>I have read, understood, and voluntarily agree to abide by the Emergency Field Respondent Code of Conduct and Statutory Liability Terms.</span>
-              </label>
-            </div>
-
-            <div id="regRespAlert" class="auth-alert" style="display: none;"></div>
-            <button type="submit" class="auth-submit-btn" id="regRespSubmitBtn" disabled>
-              <span>Accept Terms & Register Respondent Unit</span>
-              <i class="ph ph-arrow-right"></i>
-            </button>
-          </form>
         </div>
       </div>
     </div>
@@ -1312,23 +1160,13 @@
             <div class="form-group" style="flex: 1;">
               <label>Category</label>
               <select id="resCategory" required style="width: 100%; padding: 10px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-                <option value="WATER" selected>Water</option>
-                <option value="FOOD">Food</option>
-                <option value="MEDICINE">Medicine</option>
-                <option value="AMBULANCE">Ambulance</option>
+                <option value="WATER" selected>Water Supplies</option>
+                <option value="FOOD">Food Rations</option>
+                <option value="MEDICINE">Medicine / Trauma Kits</option>
+                <option value="AMBULANCE">Ambulance Unit</option>
                 <option value="RESCUE_TEAM">Rescue Team</option>
-                <option value="EQUIPMENT">Equipment</option>
+                <option value="EQUIPMENT">Specialized Equipment</option>
               </select>
-            </div>
-            <div class="form-group" style="flex: 1;">
-              <label>Quantity Total</label>
-              <input type="number" id="resQuantity" value="100" placeholder="100" min="1" required />
-            </div>
-          </div>
-          <div class="form-row" style="display: flex; gap: 12px;">
-            <div class="form-group" style="flex: 1;">
-              <label>Unit of Measure</label>
-              <input type="text" id="resUnit" value="Litres" placeholder="L / Rations / Kits / Units" required />
             </div>
             <div class="form-group" style="flex: 1;">
               <label>Depot Name</label>
@@ -1437,9 +1275,19 @@
               </div>
             </div>
           </div>
-          <button type="submit" class="auth-submit-btn" style="margin-top: 14px;">
-            <span>Submit Disaster Incident</span>
-            <i class="ph ph-arrow-right"></i>
+          <div style="margin-top: 10px; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.25); border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <strong style="color: #c4b5fd; font-size: 12px; display: block;">Incident Manager Verification</strong>
+              <small style="color: var(--text-dim); font-size: 11px;">Automatically verify incident triage for immediate AI fleet allocation</small>
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--text-main);">
+              <input type="checkbox" id="incAutoVerify" checked style="accent-color: #a78bfa;" />
+              <span>Auto-Verify</span>
+            </label>
+          </div>
+          <button type="submit" class="auth-submit-btn" style="margin-top: 14px; background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
+            <span>Log & Triage Disaster Incident</span>
+            <i class="ph ph-plus-circle"></i>
           </button>
         </form>
       </div>
@@ -1468,6 +1316,48 @@
 
       <div style="padding: 14px 22px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); flex-wrap: wrap; gap: 10px;" id="trackModalFooter">
         <!-- Injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Multi-Incident Optimization Modal -->
+  <div class="auth-modal-backdrop" id="multiOptimizeModal" style="display: none; z-index: 2600;">
+    <div class="auth-modal" style="width: 860px; max-width: 95%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; background: #0b1120; border: 1px solid rgba(167, 139, 250, 0.4); border-radius: 14px; box-shadow: 0 24px 48px rgba(0,0,0,0.8);">
+      <div class="auth-modal-header" style="padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(90deg, rgba(167, 139, 250, 0.12), rgba(56, 189, 248, 0.08));">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(167, 139, 250, 0.2); display: flex; align-items: center; justify-content: center; color: #c4b5fd; font-size: 24px; border: 1px solid rgba(167, 139, 250, 0.4);">
+            <i class="ph-fill ph-brain"></i>
+          </div>
+          <div>
+            <h3 style="font-size: 17px; margin: 0; color: #fff; font-weight: 700;">AI Multi-Incident Resource & Fleet Optimizer</h3>
+            <span style="font-size: 12px; color: var(--text-secondary);">Cross-location trade-off optimization: Solves optimal resource distribution across multiple simultaneous disaster sites</span>
+          </div>
+        </div>
+        <button class="close-modal-btn" id="closeMultiOptimizeModalBtn" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 22px; display: flex; align-items: center;"><i class="ph ph-x"></i></button>
+      </div>
+
+      <div class="auth-modal-body" style="padding: 20px 24px; overflow-y: auto; flex: 1; max-height: calc(90vh - 150px);">
+        <!-- Summary Stats Banner -->
+        <div id="multiOptimizeSummaryBanner" style="display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap;">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- Cross-Incident Optimization Feed -->
+        <div id="multiOptimizeList" style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <div style="padding: 14px 24px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); flex-wrap: wrap; gap: 12px;" id="multiOptimizeFooter">
+        <div style="font-size: 12px; color: var(--text-dim);" id="multiOptimizeStatusText">
+          Ready to review and execute optimal assignments.
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn-cancel" id="cancelMultiOptimizeBtn" style="padding: 8px 16px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-secondary); cursor: pointer;">Close</button>
+          <button type="button" class="btn-reg-unit" id="executeAllMultiDispatchBtn" style="padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #06b6d4, #0284c7); color: #fff; border: 1px solid #38bdf8; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+            <i class="ph-fill ph-paper-plane-right"></i> 1-Click Deploy Optimal Fleet
+          </button>
+        </div>
       </div>
     </div>
   </div>
